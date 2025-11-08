@@ -1,13 +1,14 @@
 import { createBrowserRouter, Navigate } from "react-router-dom";
 import Login from "../pages/Auth/Login.jsx";
+
 import Register from "../pages/Auth/Register.jsx";
 import ClientDashboard from "../pages/Dashboards/ClientDashboard.jsx";
 import StaffDashboard from "../pages/Dashboards/StaffDashboard.jsx";
 import ManagerDashboard from "../pages/Dashboards/ManagerDashboard.jsx";
 import AdminDashboard from "../pages/Dashboards/AdminDashboard.jsx";
-import IssuesPage from "../pages/Issues/IssuesPage.jsx";
-import IssueDetailPage from "../pages/Issues/IssueDetailPage.jsx";
-import ProfilePage from "../pages/ProfilePage.jsx";
+// import IssuesPage from "../pages/Issues/IssuesPage.jsx";
+// import IssueDetailPage from "../pages/Issues/IssueDetailPage.jsx";
+// import ProfilePage from "../pages/ProfilePage.jsx";
 import AppShell from "../components/Layout/AppShell.jsx";
 import { isAuthenticated } from "../utils/authHelper.js";
 
@@ -54,9 +55,9 @@ export const router = createBrowserRouter([
           </>
         ),
       },
-      { path: "/issues", element: <IssuesPage /> },
-      { path: "/issues/:id", element: <IssueDetailPage /> },
-      { path: "/profile", element: <ProfilePage /> },
+    //   { path: "/issues", element: <IssuesPage /> },
+    //   { path: "/issues/:id", element: <IssueDetailPage /> },
+    //   { path: "/profile", element: <ProfilePage /> },
     ],
   },
 ]);
