@@ -4,7 +4,6 @@ import { useEffect } from "react";
 import { useUIStore } from "./app/store/uiStore.js";
 
 export default function App() {
-
   const { darkMode } = useUIStore();
 
   useEffect(() => {
@@ -12,5 +11,4 @@ export default function App() {
   }, [darkMode]);
 
   return <RouterProvider router={router} />;
- 
 }
