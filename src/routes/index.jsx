@@ -1,6 +1,6 @@
 import { createBrowserRouter, Navigate } from "react-router-dom";
 import Login from "../pages/Auth/Login.jsx";
-
+import "../styles/globals.css";
 import Register from "../pages/Auth/Register.jsx";
 import ClientDashboard from "../pages/Dashboards/ClientDashboard.jsx";
 import StaffDashboard from "../pages/Dashboards/StaffDashboard.jsx";
