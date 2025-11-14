@@ -1,3 +1,8 @@
-export { issuesApi } from "./issuesApi";
-export { commentsApi } from "./commentsApi";
-export { attachmentsApi } from "./attachmentsApi";
+
+export * from "./authApi.js";
+export * from "./issuesApi.js";
+export * from "./commentsApi.js";
+export * from "./feedbackApi.js";
+export * from "./attachmentsApi.js";
+export * from "./notificationsApi.js";
+export * from "./reportsApi.js";
