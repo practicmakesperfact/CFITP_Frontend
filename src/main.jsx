@@ -1,8 +1,13 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App.jsx";
+
+
 import "./styles/tailwind.css";
-import "./styles/globals.css";
+
+
+import "./styles/globals.css"; 
+
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "./app/queryClient.js";
 import { Toaster } from "react-hot-toast";
