@@ -1,4 +1,3 @@
-
 import { motion } from "framer-motion";
 
 const mockActivity = [
@@ -9,12 +8,15 @@ const mockActivity = [
 export default function ActivityFeed() {
   return (
     <motion.div
-      className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg"
-      initial={{ opacity: 0, y: 20 }}
+      className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm"
+      initial={{ opacity: 0, y: 15 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3 }}
+      transition={{ duration: 0.25 }}
     >
-      <h3 className="text-lg font-semibold text-text mb-4">Recent Activity</h3>
+      <h3 className="text-lg font-semibold text-gray-800 mb-4">
+        Recent Activity
+      </h3>
+
       <ul className="space-y-3">
         {mockActivity.map((item) => (
           <li
