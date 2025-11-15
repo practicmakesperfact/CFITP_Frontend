@@ -10,8 +10,8 @@ export default function NotificationItem({ notification }) {
       transition={{ duration: 0.3 }}
     >
       <div className="flex-1">
-        <p className="text-text">{notification.message}</p>
-        <p className="text-sm text-gray-500">{notification.time}</p>
+        <p className="text-text font-medium">{notification.message}</p>
+        <p className="text-text-light text-sm">{notification.time}</p>
       </div>
       <button className="text-primary text-sm">Mark Read</button>
     </motion.div>

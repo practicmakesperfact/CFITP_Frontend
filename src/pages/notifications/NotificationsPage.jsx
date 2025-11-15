@@ -1,6 +1,6 @@
 
 import { motion } from "framer-motion";
-import NotificationItem from "../components/Notifications/NotificationItem.jsx";
+import NotificationItem from "../../components/Notifications/NotificationItem.jsx";
 
 const mockNotifications = [
   {

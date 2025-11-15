@@ -19,7 +19,7 @@
 // }
 
 
-// src/components/Layout/AppShell.jsx
+import Footer from "./Footer.jsx";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { authApi } from "../../api/authApi.js";
 import { 
@@ -58,17 +58,29 @@ export default function AppShell() {
   return (
     <div className="min-h-screen bg-background flex">
       {/* Sidebar */}
-      <div className={`${sidebarOpen ? "w-64" : "w-20"} bg-primary/10 transition-all duration-300 flex flex-col`}>
+      <div
+        className={`${
+          sidebarOpen ? "w-64" : "w-20"
+        } bg-primary/10 transition-all duration-300 flex flex-col`}
+      >
         <div className="p-4 border-b border-primary/20">
           <div className="flex items-center justify-between">
-            <h1 className={`font-bold text-2xl text-primary ${!sidebarOpen && "hidden"}`}>
+            <h1
+              className={`font-bold text-2xl text-primary ${
+                !sidebarOpen && "hidden"
+              }`}
+            >
               CFITP Portal
             </h1>
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
               className="p-2 rounded-lg hover:bg-primary/20 transition"
             >
-              {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              {sidebarOpen ? (
+                <X className="w-5 h-5" />
+              ) : (
+                <Menu className="w-5 h-5" />
+              )}
             </button>
           </div>
         </div>
@@ -110,7 +122,7 @@ export default function AppShell() {
         {/* Header */}
         <header className="bg-gray-900 text-white p-4 flex items-center justify-between">
           <h2 className="text-xl font-semibold">
-            {menuItems.find(i => i.path === currentPath)?.label || "CFITP"}
+            {menuItems.find((i) => i.path === currentPath)?.label || "CFITP"}
           </h2>
           <div className="flex items-center gap-4">
             <button className="p-2 hover:bg-gray-800 rounded-lg">
@@ -125,6 +137,7 @@ export default function AppShell() {
         {/* Page Content */}
         <main className="flex-1 p-6 bg-background">
           <Outlet />
+          <Footer />
         </main>
       </div>
     </div>
