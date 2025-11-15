@@ -1,39 +1,17 @@
-// import { useUIStore } from "../../app/store/uiStore.js";
-// import Navbar from "./Navbar.jsx";
-// import Sidebar from "./Sidebar.jsx";
-
-// export default function AppShell({ children }) {
-//   const { sidebarOpen, darkMode } = useUIStore();
-
-//   return (
-//     <div className={`min-h-screen ${darkMode ? "dark" : ""}`}>
-//       <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
-//         <Sidebar isOpen={sidebarOpen} />
-//         <div className="flex-1 flex flex-col">
-//           <Navbar />
-//           <main className="flex-1 overflow-y-auto p-6">{children}</main>
-//         </div>
-//       </div>
-//     </div>
-//   );
-// }
-
-
-import Footer from "./Footer.jsx";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
-import { authApi } from "../../api/authApi.js";
-import { 
-  Home, 
-  MessageSquare, 
-  FileText, 
-  BarChart3, 
-  Bell, 
-  User, 
+import {
+  Home,
+  MessageSquare,
+  FileText,
+  BarChart3,
+  Bell,
+  User,
   LogOut,
   Menu,
-  X
+  X,
 } from "lucide-react";
 import { useState } from "react";
+import Footer from "./Footer";
 
 const menuItems = [
   { path: "/dashboard", label: "Dashboard", icon: Home },
@@ -49,96 +27,91 @@ export default function AppShell() {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  const handleLogout = () => {
-    authApi.logout();
-  };
-
   const currentPath = location.pathname;
 
   return (
-    <div className="min-h-screen bg-background flex">
+    <div className="flex min-h-screen bg-[#F8FAFC] text-slate-700">
       {/* Sidebar */}
-      <div
+      <aside
         className={`${
           sidebarOpen ? "w-64" : "w-20"
-        } bg-primary/10 transition-all duration-300 flex flex-col`}
+        } bg-[#0EA5A4]/10 border-r border-gray-200 h-screen flex flex-col transition-all duration-300`}
       >
-        <div className="p-4 border-b border-primary/20">
-          <div className="flex items-center justify-between">
-            <h1
-              className={`font-bold text-2xl text-primary ${
-                !sidebarOpen && "hidden"
-              }`}
-            >
-              CFITP Portal
-            </h1>
-            <button
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="p-2 rounded-lg hover:bg-primary/20 transition"
-            >
-              {sidebarOpen ? (
-                <X className="w-5 h-5" />
-              ) : (
-                <Menu className="w-5 h-5" />
-              )}
-            </button>
-          </div>
+        {/* Header */}
+        <div className="p-4 flex items-center justify-between border-b border-gray-200">
+          {sidebarOpen && (
+            <h1 className="font-bold text-xl text-[#0EA5A4]">CFITP Portal</h1>
+          )}
+
+          <button
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="p-2 rounded-lg hover:bg-[#0EA5A4]/20 transition"
+          >
+            {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
+          </button>
         </div>
 
+        {/* Navigation */}
         <nav className="flex-1 p-4 space-y-2">
-          {menuItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = currentPath === item.path;
+          {menuItems.map(({ path, label, icon: Icon }) => {
+            const active = currentPath === path;
             return (
               <button
-                key={item.path}
-                onClick={() => navigate(item.path)}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition ${
-                  isActive
-                    ? "bg-primary text-white"
-                    : "hover:bg-primary/20 text-text"
-                }`}
+                key={path}
+                onClick={() => navigate(path)}
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-all
+                  ${
+                    active
+                      ? "bg-[#0EA5A4] text-white shadow-sm"
+                      : "hover:bg-[#0EA5A4]/20 text-slate-700"
+                  }`}
               >
-                <Icon className="w-5 h-5" />
-                {sidebarOpen && <span>{item.label}</span>}
+                <Icon size={20} />
+                {sidebarOpen && <span>{label}</span>}
               </button>
             );
           })}
         </nav>
 
-        <div className="p-4 border-t border-primary/20">
+        {/* Logout */}
+        <div className="p-4 border-t border-gray-200">
           <button
-            onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-red-500/20 text-red-500 transition"
+            onClick={() => navigate("/login")}
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-md hover:bg-red-500/20 text-red-500 transition"
           >
-            <LogOut className="w-5 h-5" />
+            <LogOut size={20} />
             {sidebarOpen && <span>Logout</span>}
           </button>
         </div>
-      </div>
+      </aside>
 
-      {/* Main Content */}
+      {/* Main content */}
       <div className="flex-1 flex flex-col">
         {/* Header */}
-        <header className="bg-gray-900 text-white p-4 flex items-center justify-between">
-          <h2 className="text-xl font-semibold">
+        <header className="bg-[#0F172A] text-white px-6 py-4 flex items-center justify-between shadow">
+          <h2 className="text-lg font-semibold">
             {menuItems.find((i) => i.path === currentPath)?.label || "CFITP"}
           </h2>
+
           <div className="flex items-center gap-4">
             <button className="p-2 hover:bg-gray-800 rounded-lg">
-              <Bell className="w-5 h-5" />
+              <Bell size={20} />
             </button>
-            <button className="p-2 hover:bg-gray-800 rounded-lg text-red-400">
-              <LogOut className="w-5 h-5" />
+
+            <button
+              onClick={() => navigate("/login")}
+              className="p-2 hover:bg-gray-800 rounded-lg text-red-400"
+            >
+              <LogOut size={20} />
             </button>
           </div>
         </header>
 
-        {/* Page Content */}
-        <main className="flex-1 p-6 bg-background">
+        <main className="flex-1 p-6">
           <Outlet />
-          <Footer />
         </main>
+
+        <Footer />
       </div>
     </div>
   );
