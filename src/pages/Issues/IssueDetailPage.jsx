@@ -26,7 +26,7 @@ export default function IssueDetailPage() {
       attachmentsApi.upload(file, (progress) => {
         console.log("Upload progress:", progress.loaded / progress.total);
       }),
-    onSuccess: (res) => {
+    onSuccess: () => {
       toast.success("File uploaded!");
       queryClient.invalidateQueries(["issues", id]);
     },
@@ -35,12 +35,14 @@ export default function IssueDetailPage() {
   if (!issue) return <div>Loading...</div>;
 
   return (
-    <div className="max-w-5xl mx-auto">
-      <div className="bg-white rounded-xl p-8 mb-8">
-        <h1 className="text-3xl font-bold mb-4">
-          #{issue.data.id} – {issue.data.title}
+    <div className="max-w-5xl mx-auto space-y-10">
+      {/* Issue Header */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-8 border border-gray-200 dark:border-gray-700">
+        <h1 className="text-3xl font-bold mb-4 text-text">
+          #{issue.data.id} — {issue.data.title}
         </h1>
-        <div className="flex gap-4 text-sm text-gray-600">
+
+        <div className="flex flex-wrap gap-4 text-sm text-gray-600">
           <span>
             Status: <strong>{issue.data.status}</strong>
           </span>
@@ -51,29 +53,34 @@ export default function IssueDetailPage() {
             Reported: {format(new Date(issue.data.created_at), "MMM dd, yyyy")}
           </span>
         </div>
-        <p className="mt-6 text-lg">{issue.data.description}</p>
+
+        <p className="mt-6 text-lg text-text">{issue.data.description}</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2">
-          <h2 className="text-2xl font-bold mb-6">Comments</h2>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+        {/* Comments */}
+        <div className="lg:col-span-2 space-y-6">
+          <h2 className="text-2xl font-bold text-text">Comments</h2>
           <CommentThread comments={comments?.data} />
           <CommentEditor issueId={id} />
         </div>
 
+        {/* Attachments */}
         <div>
-          <h3 className="text-xl font-semibold mb-4">Attachments</h3>
+          <h3 className="text-xl font-semibold mb-4 text-text">Attachments</h3>
+
           <FileUploader
             onUpload={(file) => uploadMutation.mutate(file)}
             isUploading={uploadMutation.isPending}
           />
+
           <div className="mt-6 space-y-3">
             {issue.data.attachments?.map((att) => (
               <a
                 key={att.id}
                 href={attachmentsApi.download(att.id)}
                 target="_blank"
-                className="block p-3 bg-gray-50 rounded-lg hover:bg-gray-100"
+                className="block p-3 bg-gray-50 dark:bg-gray-700 text-text rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition"
               >
                 {att.filename}
               </a>
