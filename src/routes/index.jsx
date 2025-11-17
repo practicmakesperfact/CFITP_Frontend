@@ -1,28 +1,21 @@
+// src/routes/index.jsx
 import { createBrowserRouter, Navigate } from "react-router-dom";
+import DashboardByRole from "../components/DashboardByRole.jsx";
 
 // Auth
 import Login from "../pages/Auth/Login.jsx";
 import Register from "../pages/Auth/Register.jsx";
 import ResetPassword from "../pages/Auth/ResetPassword.jsx";
 
-// Dashboards
-import ClientDashboard from "../pages/Dashboards/ClientDashboard.jsx";
-import StaffDashboard from "../pages/Dashboards/StaffDashboard.jsx";
-import ManagerDashboard from "../pages/Dashboards/ManagerDashboard.jsx";
-import AdminDashboard from "../pages/Dashboards/AdminDashboard.jsx";
-
-// Issues
+// Pages
 import IssuesPage from "../pages/Issues/IssuesPage.jsx";
 import IssueDetailPage from "../pages/Issues/IssueDetailPage.jsx";
-
-// Profile
 import ProfileViewer from "../pages/Profile/ProfileViewer.jsx";
 import ProfileEdit from "../pages/Profile/ProfileEdit.jsx";
-
-// Other Pages
 import FeedbackPage from "../pages/feedback/FeedbackPage.jsx";
 import ReportsPage from "../pages/reports/ReportsPage.jsx";
 import NotificationsPage from "../pages/notifications/NotificationsPage.jsx";
+import UsersPage from "../pages/Users/UsersPage.jsx"; // ← NEW
 
 // Layout
 import AppShell from "../components/Layout/AppShell.jsx";
@@ -30,48 +23,28 @@ import AppShell from "../components/Layout/AppShell.jsx";
 // Utils
 import { isAuthenticated } from "../utils/authHelper.js";
 
-// Basic Protected Route
+// Protected Route
 const ProtectedRoute = ({ children }) => {
   return isAuthenticated() ? children : <Navigate to="/login" replace />;
 };
 
-/* 
-// =======================
-// ROLE-BASED ROUTE (DISABLED FOR NOW)
-// Uncomment later when you add real restrictions
-// =======================
+// Role-Based Route
 const RoleRoute = ({ children, allowedRoles }) => {
-  const role = localStorage.getItem("user_role");
-  return isAuthenticated() && allowedRoles.includes(role)
-    ? children
-    : <Navigate to="/unauthorized" replace />;
-};
-*/
-
-// Dashboard loader (still needed)
-const DashboardByRole = () => {
-  const role = localStorage.getItem("user_role");
-  switch (role) {
-    case "client":
-      return <ClientDashboard />;
-    case "staff":
-      return <StaffDashboard />;
-    case "manager":
-      return <ManagerDashboard />;
-    case "admin":
-      return <AdminDashboard />;
-    default:
-      return <Navigate to="/login" replace />;
-  }
+  const role = localStorage.getItem("user_role") || "client";
+  return isAuthenticated() && allowedRoles.includes(role) ? (
+    children
+  ) : (
+    <Navigate to="/unauthorized" replace />
+  );
 };
 
 export const router = createBrowserRouter([
-  // Public Routes
+  // Public
   { path: "/login", element: <Login /> },
   { path: "/register", element: <Register /> },
   { path: "/reset-password", element: <ResetPassword /> },
 
-  // Protected Application
+  // Protected App
   {
     element: (
       <ProtectedRoute>
@@ -80,28 +53,69 @@ export const router = createBrowserRouter([
     ),
     children: [
       { path: "/", element: <Navigate to="/dashboard" replace /> },
-
-      // Dashboard (no role restriction for now)
       { path: "/dashboard", element: <DashboardByRole /> },
 
-      // Issues (ALL roles can access for now)
-      { path: "/issues", element: <IssuesPage /> },
-      { path: "/issues/:id", element: <IssueDetailPage /> },
+      // Role-Protected Routes
+      {
+        path: "/issues",
+        element: (
+          <RoleRoute allowedRoles={["staff", "manager", "admin"]}>
+            <IssuesPage />
+          </RoleRoute>
+        ),
+      },
+      {
+        path: "/issues/:id",
+        element: (
+          <RoleRoute allowedRoles={["staff", "manager", "admin"]}>
+            <IssueDetailPage />
+          </RoleRoute>
+        ),
+      },
+      {
+        path: "/reports",
+        element: (
+          <RoleRoute allowedRoles={["manager", "admin"]}>
+            <ReportsPage />
+          </RoleRoute>
+        ),
+      },
+      {
+        path: "/feedback",
+        element: (
+          <RoleRoute allowedRoles={["admin"]}>
+            <FeedbackPage />
+          </RoleRoute>
+        ),
+      },
+      {
+        path: "/notifications",
+        element: (
+          <RoleRoute allowedRoles={["admin"]}>
+            <NotificationsPage />
+          </RoleRoute>
+        ),
+      },
+      {
+        path: "/users",
+        element: (
+          <RoleRoute allowedRoles={["admin"]}>
+            <UsersPage />
+          </RoleRoute>
+        ),
+      },
 
-      // Profile (all roles)
+      // Always allowed
       { path: "/profile", element: <ProfileViewer /> },
       { path: "/profile/edit", element: <ProfileEdit /> },
-
-      // Other pages (all allowed for now)
-      { path: "/feedback", element: <FeedbackPage /> },
-      { path: "/reports", element: <ReportsPage /> },
-      { path: "/notifications", element: <NotificationsPage /> },
     ],
   },
 
-  // Temporary: Hide unauthorized page during dev
-  { path: "/unauthorized", element: <div /> },
-
-  // Fallback
+  {
+    path: "/unauthorized",
+    element: (
+      <div className="p-10 text-center text-2xl">Unauthorized Access</div>
+    ),
+  },
   { path: "*", element: <Navigate to="/login" replace /> },
 ]);

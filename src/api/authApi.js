@@ -101,4 +101,5 @@ export const authApi = {
     removeTokens();
     window.location.href = "/login";
   },
+  createClient: (data) => api.post("/users/create-client/", data), // Django endpoint
 };

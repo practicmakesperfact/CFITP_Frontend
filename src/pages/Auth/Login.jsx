@@ -1,118 +1,3 @@
-
-// import { useForm } from "react-hook-form";
-// import { useMutation } from "@tanstack/react-query";
-// import { motion } from "framer-motion";
-// import { Link, useNavigate } from "react-router-dom";
-// import toast from "react-hot-toast";
-// import { authApi } from "../../api/authApi.js";
-// import { Loader2 } from "lucide-react";
-
-// export default function Login() {
-//   const {
-//     register,
-//     handleSubmit,
-//     formState: { errors },
-//   } = useForm();
-//   const navigate = useNavigate();
-
-//   const mutation = useMutation({
-//     mutationFn: authApi.login,
-//     onSuccess: async (response) => {
-//       const { access, refresh } = response.data;
-//       localStorage.setItem("access_token", access);
-//       localStorage.setItem("refresh_token", refresh);
-
-//       const { data } = await authApi.me();
-//       localStorage.setItem("user_role", data.role);
-//       localStorage.setItem("user_profile", JSON.stringify(data));
-
-//       toast.success(`Welcome back, ${data.first_name || "User"}!`);
-//       navigate("/dashboard");
-//     },
-//     onError: (error) => {
-//       toast.error(error.response?.data?.detail || "Invalid credentials");
-//     },
-//   });
-
-//   return (
-//     <motion.div
-//       initial={{ opacity: 0, y: 20 }}
-//       animate={{ opacity: 1, y: 0 }}
-//       className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/10 via-background to-accent/10 p-4"
-//     >
-//       <div className="w-full max-w-md bg-white dark:bg-gray-900 rounded-2xl shadow-2xl p-8 border border-gray-200 dark:border-gray-700">
-//         <h1 className="text-3xl font-bold text-primary text-center mb-8">
-//           CFITP Login
-//         </h1>
-
-//         <form
-//           onSubmit={handleSubmit((data) => mutation.mutate(data))}
-//           className="space-y-5"
-//         >
-//           <div>
-//             <label className="block text-sm font-medium text-text mb-2">
-//               Email
-//             </label>
-//             <input
-//               {...register("email", { required: "Email is required" })}
-//               type="email"
-//               placeholder="you@example.com"
-//               className="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-text placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary transition"
-//             />
-//             {errors.email && (
-//               <p className="text-red-500 text-xs mt-1">
-//                 {errors.email.message}
-//               </p>
-//             )}
-//           </div>
-
-//           <div>
-//             <label className="block text-sm font-medium text-text mb-2">
-//               Password
-//             </label>
-//             <input
-//               {...register("password", { required: "Password is required" })}
-//               type="password"
-//               placeholder="••••••••"
-//               className="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-text placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary transition"
-//             />
-//             {errors.password && (
-//               <p className="text-red-500 text-xs mt-1">
-//                 {errors.password.message}
-//               </p>
-//             )}
-//           </div>
-
-//           <button
-//             type="submit"
-//             disabled={mutation.isPending}
-//             className="w-full bg-primary hover:bg-accent text-white font-bold py-4 rounded-xl transition transform hover:scale-105 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-//           >
-//             {mutation.isPending ? (
-//               <>
-//                 <Loader2 className="w-5 h-5 animate-spin" />
-//                 Logging in...
-//               </>
-//             ) : (
-//               "Login"
-//             )}
-//           </button>
-//         </form>
-
-//         <p className="text-center mt-6 text-sm text-text">
-//           Don't have an account?{" "}
-//           <Link
-//             to="/register"
-//             className="text-primary font-bold hover:underline"
-//           >
-//             Register
-//           </Link>
-//         </p>
-//       </div>
-//     </motion.div>
-//   );
-// }
-
 // src/pages/Auth/Login.jsx
 import { useForm } from "react-hook-form";
 import { useMutation } from "@tanstack/react-query";
@@ -120,79 +5,172 @@ import { motion } from "framer-motion";
 import { Link, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import { authApi } from "../../api/authApi.js";
-import { Loader2 } from "lucide-react";
+import { Loader2, ChevronDown } from "lucide-react";
+import { useState } from "react";
+import { useUIStore } from "../../app/store/uiStore.js";
+
+// DEMO ACCOUNTS — HARDOCED FOR FRONTEND-ONLY LOGIN
+const DEMO_ACCOUNTS = {
+  "admin@cfitp.com": { password: "admin123", role: "admin" },
+  "manager@cfitp.com": { password: "manager123", role: "manager" },
+  "staff@cfitp.com": { password: "staff123", role: "staff" },
+  "client@cfitp.com": { password: "client123", role: "client" },
+};
 
 export default function Login() {
-  const { register, handleSubmit, formState: { errors } } = useForm();
+  const { register, handleSubmit, setValue } = useForm();
   const navigate = useNavigate();
+  const [selectedRole, setSelectedRole] = useState("client");
 
-  const mutation = useMutation({
-    mutationFn: authApi.login,
-    onSuccess: async () => {
-      const { data } = await authApi.me();
-      toast.success(`Welcome, ${data.first_name}!`);
-      navigate("/dashboard");
-    },
-    onError: (error) => {
-      toast.error(error.message || "Login failed");
-    },
-  });
+  const handleRoleChange = (role) => {
+    setSelectedRole(role);
+    const account = Object.entries(DEMO_ACCOUNTS).find(
+      ([_, v]) => v.role === role
+    );
+    if (account) {
+      const [email, info] = account;
+      setValue("email", email);
+      setValue("password", info.password);
+      toast.success(`Demo: ${email} / ${info.password}`, { duration: 5000 });
+    }
+  };
+
+  const onSubmit = async (data) => {
+    const { email, password } = data;
+
+    // CHECK IF IT'S A DEMO ACCOUNT → BYPASS BACKEND
+    if (DEMO_ACCOUNTS[email]?.password === password) {
+      const role = DEMO_ACCOUNTS[email].role;
+
+      // Fake tokens (mock values)
+      localStorage.setItem("access_token", `mock-access-${Date.now()}`);
+      localStorage.setItem("refresh_token", `mock-refresh-${Date.now()}`);
+      localStorage.setItem("user_role", role);
+      localStorage.setItem(
+        "user_profile",
+        JSON.stringify({
+          email,
+          first_name: role.charAt(0).toUpperCase() + role.slice(1),
+          role,
+        })
+      );
+
+      useUIStore.getState().setUserRole(role);
+      window.dispatchEvent(new Event("roleChanged"));
+
+      toast.success(`Welcome back, ${role.toUpperCase()}!`);
+      navigate("/dashboard", { replace: true });
+      return;
+    }
+
+    // ONLY IF NOT DEMO → TRY REAL BACKEND
+    try {
+      const response = await authApi.login(data);
+      const { access, refresh } = response.data;
+
+      localStorage.setItem("access_token", access);
+      localStorage.setItem("refresh_token", refresh);
+
+      let finalRole = selectedRole;
+      try {
+        const { data: user } = await authApi.me();
+        if (user?.role) finalRole = user.role;
+        localStorage.setItem("user_profile", JSON.stringify(user));
+      } catch (err) {}
+
+      localStorage.setItem("user_role", finalRole);
+      useUIStore.getState().setUserRole(finalRole);
+      window.dispatchEvent(new Event("roleChanged"));
+
+      toast.success(`Welcome back, ${finalRole.toUpperCase()}!`);
+      navigate("/dashboard", { replace: true });
+    } catch (error) {
+      toast.error("Invalid credentials");
+    }
+  };
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
+       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/10 via-background to-accent/10 p-4"
+      className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/10 via-background to-accent/10 p-4" 
     >
-      <div className="w-full max-w-md bg-white dark:bg-gray-900 rounded-2xl shadow-2xl p-8 border border-gray-200 dark:border-gray-700">
-        <h1 className="text-3xl font-bold text-primary text-center mb-8">CFITP Login</h1>
+      <div className="w-full max-w-md bg-slate-900/95 backdrop-blur-2xl rounded-3xl shadow-2xl p-10 border border-slate-800">
+        <h1 className="text-5xl font-bold text-cyan-400 text-center mb-10">
+          CFITP Login
+        </h1>
 
-        <form onSubmit={handleSubmit((data) => mutation.mutate(data))} className="space-y-5">
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-7">
           <div>
-            <label className="block text-sm font-medium text-text mb-2">Email</label>
+            <label className="block text-sm font-semibold text-white mb-2">
+              Email
+            </label>
             <input
-              {...register("email", { required: "Required" })}
+              {...register("email", { required: true })}
               type="email"
-              placeholder="you@example.com"
-              className="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-text placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full px-5 py-4 bg-slate-800/60 border border-slate-700 rounded-xl text-white placeholder-gray-400 focus:outline-none transition"
+              placeholder="admin@cfitp.com"
             />
-            {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email.message}</p>}
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-text mb-2">Password</label>
+            <label className="block text-sm font-semibold text-white mb-2">
+              Password
+            </label>
             <input
-              {...register("password", { required: "Required" })}
+              {...register("password", { required: true })}
               type="password"
-              placeholder="••••••"
-              className="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-text placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full px-5 py-4 bg-slate-800/60 border border-slate-700 rounded-xl text-white placeholder-gray-400 focus:outline-none transition"
             />
-            <p className="text-xs text-gray-500 mt-1">Use: <code>123456</code></p>
-            {errors.password && <p className="text-red-500 text-xs mt-1">{errors.password.message}</p>}
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-cyan-300 mb-2">
+              Login as (Dev Mode)
+            </label>
+            <div className="relative">
+              <select
+                value={selectedRole}
+                onChange={(e) => handleRoleChange(e.target.value)}
+                className="w-full px-5 py-4 bg-slate-800/60 border border-slate-700 rounded-xl text-white appearance-none cursor-pointer pr-12 transition"
+              >
+                <option value="client">Client</option>
+                <option value="staff">Staff</option>
+                <option value="manager">Manager</option>
+                <option value="admin">Admin</option>
+              </select>
+              <ChevronDown className="absolute right-4 top-5 w-5 h-5 text-gray-400 pointer-events-none" />
+            </div>
           </div>
 
           <button
             type="submit"
-            disabled={mutation.isPending}
-            className="w-full bg-primary hover:bg-accent text-white font-bold py-4 rounded-xl transition transform hover:scale-105 disabled:opacity-70 flex items-center justify-center gap-2"
+            className="w-full bg-cyan-500 hover:bg-cyan-400 text-white font-bold py-4 rounded-xl transition-all hover:scale-105 shadow-xl flex items-center justify-center gap-3"
           >
-            {mutation.isPending ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                Logging in...
-              </>
-            ) : (
-              "Login"
-            )}
+            Login
           </button>
         </form>
 
-        <p className="text-center mt-6 text-sm text-text">
-          Don't have an account?{" "}
-          <Link to="/register" className="text-primary font-bold hover:underline">
-            Register
+        <div className="mt-8 p-5 bg-slate-800/50 rounded-xl border border-slate-700">
+          <p className="text-cyan-300 font-semibold mb-3">
+            Demo Accounts (Auto-filled)
+          </p>
+          <div className="text-xs space-y-1 text-gray-300">
+            <div>admin@cfitp.com → admin123</div>
+            <div>manager@cfitp.com → manager123</div>
+            <div>staff@cfitp.com → staff123</div>
+            <div>client@cfitp.com → client123</div>
+          </div>
+        </div>
+
+        <div className="mt-6 text-center">
+          <Link
+            to="/register"
+            className="text-cyan-400 hover:text-cyan-300 text-sm"
+          >
+            No account? Register (clients only)
           </Link>
-        </p>
+        </div>
       </div>
     </motion.div>
   );

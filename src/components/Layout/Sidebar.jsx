@@ -23,7 +23,8 @@ export default function Sidebar({ isOpen }) {
     <aside
       className={`${
         isOpen ? "w-64" : "w-20"
-      } bg-[#0EA5A4]/10 border-r border-gray-200 h-screen flex flex-col transition-all duration-300`}
+      } bg-[#0EA5A4]/5 border-r border-gray-200 dark:border-gray-700
+        flex flex-col transition-all duration-300 h-screen overflow-y-auto`}
     >
       <div className="p-6">
         {isOpen && (
@@ -31,21 +32,22 @@ export default function Sidebar({ isOpen }) {
         )}
       </div>
 
-      <nav className="flex-1 px-4">
+      <nav className="flex-1 px-4 pb-4">
         {navItems.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
             className={({ isActive }) =>
-              `flex items-center gap-3 px-4 py-3 rounded-lg mb-2 transition-all 
+              `flex items-center gap-3 px-4 py-3 rounded-lg mb-2 transition-all
                ${
                  isActive
                    ? "bg-[#0EA5A4] text-white shadow-sm"
-                   : "hover:bg-[#0EA5A4]/20 text-slate-700"
+                   : "hover:bg-[#0EA5A4]/20 text-slate-700 dark:text-slate-300"
                }`
             }
+            aria-label={isOpen ? undefined : item.label}
           >
-            <item.icon className="h-5 w-5" />
+            <item.icon className="h-5 w-5 flex-shrink-0" />
             {isOpen && <span>{item.label}</span>}
           </NavLink>
         ))}
