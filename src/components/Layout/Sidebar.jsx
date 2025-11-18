@@ -24,7 +24,7 @@ export default function Sidebar({ isOpen }) {
       className={`${
         isOpen ? "w-64" : "w-20"
       } bg-[#0EA5A4]/5 border-r border-gray-200 dark:border-gray-700
-        flex flex-col transition-all duration-300 h-screen overflow-y-auto`}
+        flex flex-col transition-all duration-300 min-h-screen h-auto overflow-y-auto`}
     >
       <div className="p-6">
         {isOpen && (
@@ -45,9 +45,9 @@ export default function Sidebar({ isOpen }) {
                    : "hover:bg-[#0EA5A4]/20 text-slate-700 dark:text-slate-300"
                }`
             }
-            aria-label={isOpen ? undefined : item.label}
+            aria-label={!isOpen ? item.label : undefined}
           >
-            <item.icon className="h-5 w-5 flex-shrink-0" />
+            <item.icon className="h-5 w-5" />
             {isOpen && <span>{item.label}</span>}
           </NavLink>
         ))}

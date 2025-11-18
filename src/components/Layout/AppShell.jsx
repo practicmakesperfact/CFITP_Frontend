@@ -1,4 +1,3 @@
-
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import {
   Home,
@@ -13,17 +12,18 @@ import {
   X,
   Users,
 } from "lucide-react";
-import { useState } from "react";
-import Footer from "./Footer";
-import { useUIStore } from "../../app/store/uiStore.js"; // ← Add
 
+import { useUIStore } from "../../app/store/uiStore.js";
+
+import Footer from './Footer';
 export default function AppShell() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { sidebarOpen, toggleSidebar, userRole } = useUIStore(); // ← Get role
+
+  const { sidebarOpen, toggleSidebar, userRole } = useUIStore();
   const currentPath = location.pathname;
 
-  // Define all possible menu items
+  // All menu items
   const allMenuItems = [
     {
       path: "/dashboard",
@@ -55,7 +55,12 @@ export default function AppShell() {
       icon: Bell,
       roles: ["admin"],
     },
-    { path: "/users", label: "Users", icon: Users, roles: ["admin"] }, // ← New for Admin
+    {
+      path: "/users",
+      label: "Users",
+      icon: Users,
+      roles: ["admin"],
+    },
     {
       path: "/profile",
       label: "Profile",
@@ -64,7 +69,7 @@ export default function AppShell() {
     },
   ];
 
-  // Filter based on role
+  // Role filtering
   const menuItems = allMenuItems.filter((item) =>
     item.roles.includes(userRole)
   );
@@ -75,12 +80,13 @@ export default function AppShell() {
       <aside
         className={`${
           sidebarOpen ? "w-64" : "w-20"
-        } bg-[#0EA5A4]/10 border-r border-gray-200 h-screen flex flex-col transition-all duration-300`}
+        } bg-[#0EA5A4]/10 border-r border-gray-200 min-h-screen h-auto flex flex-col transition-all duration-300 overflow-y-auto`}
       >
         <div className="p-4 flex items-center justify-between border-b border-gray-200">
           {sidebarOpen && (
             <h1 className="font-bold text-xl text-[#0EA5A4]">CFITP Portal</h1>
           )}
+
           <button
             onClick={toggleSidebar}
             className="p-2 rounded-lg hover:bg-[#0EA5A4]/20"
@@ -92,6 +98,7 @@ export default function AppShell() {
         <nav className="flex-1 p-4 space-y-2">
           {menuItems.map(({ path, label, icon: Icon }) => {
             const active = currentPath.startsWith(path);
+
             return (
               <button
                 key={path}
@@ -131,10 +138,12 @@ export default function AppShell() {
             {menuItems.find((i) => currentPath.startsWith(i.path))?.label ||
               "CFITP"}
           </h2>
+
           <div className="flex items-center gap-4">
             <button className="p-2 hover:bg-gray-800 rounded-lg">
               <Bell size={20} />
             </button>
+
             <button
               onClick={() => {
                 localStorage.clear();
@@ -150,7 +159,6 @@ export default function AppShell() {
         <main className="flex-1 p-6 bg-gray-50">
           <Outlet />
         </main>
-
         <Footer />
       </div>
     </div>
