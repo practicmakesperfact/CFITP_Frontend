@@ -26,10 +26,13 @@ export default function CommentEditor({ issueId }) {
         value={content}
         onChange={(e) => setContent(e.target.value)}
         placeholder="Type @ to mention someone..."
-        className="w-full p-4 border rounded-lg"
+        className="w-full p-4 border rounded-lg outline-none"
         rows="4"
       />
-      <button onClick={handleSubmit} className="btn-primary mt-2">
+      <button
+        type="submit"
+        className="mt-4 bg-[#0EA5A4] hover:bg-[#0d8c8b] text-white px-6 py-3 rounded-xl transition font-medium"
+      >
         Post Comment
       </button>
     </div>
