@@ -1,5 +1,11 @@
 
-let _issues = [
+const STORAGE_KEYS = {
+  ISSUES: "cf_issues_v1",
+  COMMENTS: "cf_comments_v1",
+  NEXT_IDS: "cf_nextids_v1",
+};
+
+const defaultIssues = [
   {
     id: 1,
     title: "User can't login",
@@ -18,47 +24,80 @@ let _issues = [
     created_at: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
     attachments: [],
   },
-  {
-    id: 3,
-    title: "Sidebar hover issue",
-    description: "Hover state flickers on small screens.",
-    status: "closed",
-    priority: "low",
-    created_at: new Date(Date.now() - 1000 * 60 * 60 * 48).toISOString(),
-    attachments: [],
-  },
 ];
 
-let _comments = {
-  // issueId: [ { id, author, text, created_at } ]
-  1: [
-    {
-      id: 1,
-      author: "Admin",
-      text: "Investigating this.",
-      created_at: new Date().toISOString(),
-    },
-  ],
-  2: [],
-  3: [],
-};
+function readJSON(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return fallback;
+    return JSON.parse(raw);
+  } catch {
+    return fallback;
+  }
+}
 
-let _nextIssueId = 4;
-let _nextCommentId = 2;
+function writeJSON(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (e) {
+    console.error("localStorage write failed", e);
+  }
+}
 
-const delay = (ms = 300) => new Promise((res) => setTimeout(res, ms));
+function initStorage() {
+  const issues = readJSON(STORAGE_KEYS.ISSUES, null);
+  const comments = readJSON(STORAGE_KEYS.COMMENTS, null);
+  const next = readJSON(STORAGE_KEYS.NEXT_IDS, null);
 
-export const mockIssues = {
+  if (!issues) writeJSON(STORAGE_KEYS.ISSUES, defaultIssues);
+  if (!comments) {
+    // default comment for issue 1
+    const c = {
+      1: [
+        {
+          id: 1,
+          author: "Admin",
+          content: "Investigating this issue.",
+          created_at: new Date().toISOString(),
+        },
+      ],
+    };
+    writeJSON(STORAGE_KEYS.COMMENTS, c);
+  }
+  if (!next)
+    writeJSON(STORAGE_KEYS.NEXT_IDS, {
+      issue: 3,
+      comment: 2,
+      attachment: Date.now(),
+    });
+}
+
+initStorage();
+
+const delay = (ms = 250) => new Promise((res) => setTimeout(res, ms));
+
+const mockIssues = {
   list: async () => {
-    await delay(250);
-    // return in API-like shape { data: [...] }
-    return { data: _issues.slice() };
+    await delay();
+    const issues = readJSON(STORAGE_KEYS.ISSUES, []);
+    // return API-like shape
+    return {
+      data: issues
+        .slice()
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at)),
+    };
   },
 
   create: async (payload) => {
-    await delay(250);
+    await delay();
+    const issues = readJSON(STORAGE_KEYS.ISSUES, []);
+    const next = readJSON(STORAGE_KEYS.NEXT_IDS, {
+      issue: 1,
+      comment: 1,
+      attachment: Date.now(),
+    });
     const newIssue = {
-      id: _nextIssueId++,
+      id: next.issue++,
       title: payload.title || "Untitled",
       description: payload.description || "",
       status: payload.status || "open",
@@ -66,76 +105,109 @@ export const mockIssues = {
       created_at: new Date().toISOString(),
       attachments: [],
     };
-    _issues = [newIssue, ..._issues];
-    _comments[newIssue.id] = [];
+    issues.unshift(newIssue);
+    writeJSON(STORAGE_KEYS.ISSUES, issues);
+    writeJSON(STORAGE_KEYS.NEXT_IDS, next);
+    // ensure comments container
+    const comments = readJSON(STORAGE_KEYS.COMMENTS, {});
+    comments[newIssue.id] = comments[newIssue.id] || [];
+    writeJSON(STORAGE_KEYS.COMMENTS, comments);
+
     return { data: newIssue };
   },
 
   retrieve: async (id) => {
-    await delay(200);
-    const found = _issues.find((i) => String(i.id) === String(id));
+    await delay();
+    const issues = readJSON(STORAGE_KEYS.ISSUES, []);
+    const found = issues.find((i) => String(i.id) === String(id));
     if (!found) throw new Error("Not found");
-    // simulate API shape
     return { data: found };
   },
 
   update: async (id, payload) => {
-    await delay(200);
-    _issues = _issues.map((i) =>
+    await delay();
+    let issues = readJSON(STORAGE_KEYS.ISSUES, []);
+    issues = issues.map((i) =>
       String(i.id) === String(id) ? { ...i, ...payload } : i
     );
-    const updated = _issues.find((i) => String(i.id) === String(id));
+    writeJSON(STORAGE_KEYS.ISSUES, issues);
+    const updated = issues.find((i) => String(i.id) === String(id));
     return { data: updated };
   },
 
   delete: async (id) => {
-    await delay(200);
-    _issues = _issues.filter((i) => String(i.id) !== String(id));
-    delete _comments[id];
+    await delay();
+    let issues = readJSON(STORAGE_KEYS.ISSUES, []);
+    issues = issues.filter((i) => String(i.id) !== String(id));
+    writeJSON(STORAGE_KEYS.ISSUES, issues);
+    const comments = readJSON(STORAGE_KEYS.COMMENTS, {});
+    delete comments[id];
+    writeJSON(STORAGE_KEYS.COMMENTS, comments);
     return { data: true };
   },
 
-  // COMMENTS
   comments: {
     list: async (issueId) => {
-      await delay(200);
-      return { data: _comments[issueId] ? [..._comments[issueId]] : [] };
+      await delay();
+      const comments = readJSON(STORAGE_KEYS.COMMENTS, {});
+      return { data: comments[issueId] ? [...comments[issueId]] : [] };
     },
+
     create: async (issueId, payload) => {
-      await delay(200);
+      await delay();
+      const comments = readJSON(STORAGE_KEYS.COMMENTS, {});
+      const next = readJSON(STORAGE_KEYS.NEXT_IDS, {
+        issue: 1,
+        comment: 1,
+        attachment: Date.now(),
+      });
       const comment = {
-        id: _nextCommentId++,
+        id: next.comment++,
         author: payload.author || "You",
-        text: payload.text || "",
+        content: payload.content || "",
         created_at: new Date().toISOString(),
       };
-      _comments[issueId] = _comments[issueId] || [];
-      _comments[issueId].push(comment);
+      comments[issueId] = comments[issueId] || [];
+      comments[issueId].push(comment); // push => we'll reverse when displaying so newest on top
+      writeJSON(STORAGE_KEYS.COMMENTS, comments);
+      writeJSON(STORAGE_KEYS.NEXT_IDS, next);
       return { data: comment };
     },
   },
 
-  // ATTACHMENTS (very simple mock)
   attachments: {
     upload: async (issueId, file) => {
       await delay(300);
+      const issues = readJSON(STORAGE_KEYS.ISSUES, []);
+      const next = readJSON(STORAGE_KEYS.NEXT_IDS, {
+        issue: 1,
+        comment: 1,
+        attachment: Date.now(),
+      });
+
       const att = {
-        id: Date.now(),
-        filename: file?.name || "file.txt",
-        url: "#",
+        id: next.attachment++,
+        filename: file?.name || `file-${Date.now()}`,
+        url: "#", // front-end only
+        created_at: new Date().toISOString(),
       };
-      _issues = _issues.map((i) =>
+
+      const updated = issues.map((i) =>
         String(i.id) === String(issueId)
           ? { ...i, attachments: [...(i.attachments || []), att] }
           : i
       );
+
+      writeJSON(STORAGE_KEYS.ISSUES, updated);
+      writeJSON(STORAGE_KEYS.NEXT_IDS, next);
       return { data: att };
     },
   },
 
-  // helper to reset (for tests)
-  _reset: (state) => {
-    if (Array.isArray(state)) _issues = state;
+  // helper: reset (dev)
+  _reset: (stateIssues = null, stateComments = null) => {
+    if (stateIssues) writeJSON(STORAGE_KEYS.ISSUES, stateIssues);
+    if (stateComments) writeJSON(STORAGE_KEYS.COMMENTS, stateComments);
   },
 };
 
