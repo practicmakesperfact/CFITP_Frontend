@@ -1,41 +1,41 @@
-import ReactApexChart from "react-apexcharts";
-import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
+import { lazy, Suspense } from "react";
+const Chart = lazy(() => import("react-apexcharts"));
 
-export default function ChartCard({
-  title,
-  type = "pie",
-  data = [],
-  categories = [],
-}) {
-  const [options, setOptions] = useState({});
-
-  useEffect(() => {
-    setOptions({
-      chart: { type, toolbar: { show: false } },
-      labels: categories,
-      theme: { mode: "light" },
-      colors: ["#0EA5A4", "#FB923C", "#334155"],
-      stroke: { width: 2 },
+export default function ChartCard({ title, type, data }) {
+  const options = {
+    pie: {
+      chart: { type: "donut" },
+      labels: data.labels,
+      colors: ["#EF4444", "#F59E0B", "#10B981"],
       legend: { position: "bottom" },
-    });
-  }, [type, categories]);
+      dataLabels: { enabled: false },
+    },
+    line: {
+      chart: { type: "area", toolbar: { show: false } },
+      xaxis: { categories: data.categories },
+      colors: ["#0EA5A4"],
+      stroke: { curve: "smooth" },
+      fill: { opacity: 0.1 },
+    },
+  };
 
   return (
-    <motion.div
-      className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm"
-      initial={{ opacity: 0, scale: 0.98 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 0.25 }}
-    >
-      <h3 className="text-lg font-semibold text-gray-800 mb-4">{title}</h3>
-
-      <ReactApexChart
-        options={options}
-        series={data}
-        type={type}
-        height={250}
-      />
-    </motion.div>
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+      <h3 className="text-lg font-semibold text-slate-800 mb-4">{title}</h3>
+      <Suspense
+        fallback={
+          <div className="h-64 flex items-center justify-center text-slate-400">
+            Loading chart...
+          </div>
+        }
+      >
+        <Chart
+          type={type === "pie" ? "donut" : "area"}
+          series={type === "pie" ? data.series : data.series}
+          options={options[type]}
+          height={280}
+        />
+      </Suspense>
+    </div>
   );
 }

@@ -1,58 +1,65 @@
 
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Search, Plus } from "lucide-react";
-
-const mockFeedback = [
-  { id: 1, title: "UI is slow", status: "new", date: "2 days ago" },
-  {
-    id: 2,
-    title: "Add export button",
-    status: "converted",
-    date: "1 week ago",
-  },
-];
+import toast from "react-hot-toast";
+import { MessageSquare, Send } from "lucide-react";
 
 export default function FeedbackPage() {
-  const [search, setSearch] = useState("");
+  const [feedback, setFeedback] = useState("");
+  const navigate = useNavigate();
+
+  const handleSubmit = () => {
+    if (!feedback.trim()) {
+      toast.error("Please write your feedback first");
+      return;
+    }
+
+    // Save to localStorage
+    const existing = JSON.parse(localStorage.getItem("cfitp_feedback") || "[]");
+    existing.unshift({
+      id: Date.now(),
+      text: feedback,
+      date: new Date().toISOString(),
+      read: false,
+    });
+   localStorage.setItem("cfitp_feedback", JSON.stringify(existing));
+
+    toast.success("Thank you! Your feedback has been submitted.");
+    setFeedback("");
+
+    setTimeout(() => navigate("/dashboard"), 1500);
+  };
 
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="space-y-6"
+      className="max-w-4xl mx-auto p-6"
     >
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-text">Feedback</h1>
-        <button className="bg-primary hover:bg-accent text-white px-4 py-2 rounded-lg flex items-center gap-2">
-          <Plus className="w-5 h-5" /> Submit Feedback
-        </button>
+      <div className="flex items-center gap-3 mb-8">
+        <MessageSquare className="text-[#0EA5A4]" size={32} />
+        <h1 className="text-3xl font-bold text-slate-800">Submit Feedback</h1>
       </div>
 
-      <div className="relative">
-        <Search className="absolute left-3 top-3 w-5 h-5 text-gray-500" />
-        <input
-          type="text"
-          placeholder="Search feedback..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full pl-10 pr-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600"
+      <div className="bg-white rounded-3xl shadow-lg p-10">
+        <textarea
+          value={feedback}
+          onChange={(e) => setFeedback(e.target.value)}
+          placeholder="We'd love to hear your thoughts! Suggestions, praise, or anything you'd like to share..."
+          rows={12}
+          className="w-full px-6 py-5 rounded-2xl border border-gray-300 focus:border-[#0EA5A4] focus:ring-4 focus:ring-teal-100 outline-none resize-none text-lg transition"
         />
-      </div>
 
-      <div className="grid gap-4">
-        {mockFeedback.map((f) => (
-          <div
-            key={f.id}
-            className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md"
+        <div className="flex justify-end mt-8">
+          <button
+            onClick={handleSubmit}
+            className="bg-[#FB923C] hover:bg-orange-500 text-white px-10 py-4 rounded-xl font-medium shadow-lg flex items-center gap-3 transition transform hover:scale-105"
           >
-            <h3 className="font-semibold text-text">{f.title}</h3>
-            <div className="flex justify-between mt-2 text-sm text-gray-500">
-              <span>{f.status}</span>
-              <span>{f.date}</span>
-            </div>
-          </div>
-        ))}
+            <Send size={22} />
+            Send Feedback
+          </button>
+        </div>
       </div>
     </motion.div>
   );

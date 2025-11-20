@@ -1,96 +1,53 @@
+ 
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
-import {
-  Home,
-  Bug,
-  MessageSquare,
-  FileText,
-  BarChart3,
-  Bell,
-  User,
-  LogOut,
-  Menu,
-  X,
-  Users,
-} from "lucide-react";
-
+import { Home, Bug, MessageSquare, BarChart3, Bell, User, LogOut, Menu, X, Users } from "lucide-react";
 import { useUIStore } from "../../app/store/uiStore.js";
-
 import Footer from './Footer';
+
 export default function AppShell() {
   const navigate = useNavigate();
   const location = useLocation();
-
   const { sidebarOpen, toggleSidebar, userRole } = useUIStore();
   const currentPath = location.pathname;
 
-  // All menu items
-  const allMenuItems = [
-    {
-      path: "/dashboard",
-      label: "Dashboard",
-      icon: Home,
-      roles: ["client", "staff", "manager", "admin"],
-    },
-    {
-      path: "/issues",
-      label: "Issues",
-      icon: Bug,
-      roles: ["staff", "manager", "admin"],
-    },
-    {
-      path: "/feedback",
-      label: "Feedback",
-      icon: MessageSquare,
-      roles: ["admin"],
-    },
-    {
-      path: "/reports",
-      label: "Reports",
-      icon: BarChart3,
-      roles: ["manager", "admin"],
-    },
-    {
-      path: "/notifications",
-      label: "Notifications",
-      icon: Bell,
-      roles: ["admin"],
-    },
-    {
-      path: "/users",
-      label: "Users",
-      icon: Users,
-      roles: ["admin"],
-    },
-    {
-      path: "/profile",
-      label: "Profile",
-      icon: User,
-      roles: ["client", "staff", "manager", "admin"],
-    },
-  ];
+  // ROLE-BASED MENU — 100% FROM YOUR DOCUMENTS
+  const menuConfig = {
+    client: [
+      { path: "/dashboard", label: "Dashboard", icon: Home },
+      { path: "/issues", label: "My Issues", icon: Bug },
+      { path: "/feedback/new", label: "Submit Feedback", icon: MessageSquare },
+      { path: "/profile", label: "Profile", icon: User },
+    ],
+    staff: [
+      { path: "/dashboard", label: "Dashboard", icon: Home },
+      { path: "/issues", label: "Assigned Issues", icon: Bug },
+      { path: "/profile", label: "Profile", icon: User },
+    ],
+    manager: [
+      { path: "/dashboard", label: "Dashboard", icon: Home },
+      { path: "/issues", label: "All Issues", icon: Bug },
+      { path: "/reports", label: "Reports", icon: BarChart3 },
+      { path: "/profile", label: "Profile", icon: User },
+    ],
+    admin: [
+      { path: "/dashboard", label: "Dashboard", icon: Home },
+      { path: "/issues", label: "All Issues", icon: Bug },
+      { path: "/reports", label: "Reports", icon: BarChart3 },
+      { path: "/notifications", label: "Notifications", icon: Bell },
+      { path: "/users", label: "Users", icon: Users },
+      { path: "/profile", label: "Profile", icon: User },
+    ],
+  };
 
-  // Role filtering
-  const menuItems = allMenuItems.filter((item) =>
-    item.roles.includes(userRole)
-  );
+  const menuItems = menuConfig[userRole] || menuConfig.client;
 
   return (
     <div className="flex min-h-screen bg-[#F8FAFC] text-slate-700">
       {/* Sidebar */}
-      <aside
-        className={`${
-          sidebarOpen ? "w-64" : "w-20"
-        } bg-[#0EA5A4]/10 border-r border-gray-200 min-h-screen h-auto flex flex-col transition-all duration-300 overflow-y-auto`}
-      >
+      <aside className={`${sidebarOpen ? "w-64" : "w-20"} bg-[#0EA5A4]/10 border-r border-gray-200 transition-all duration-300 flex flex-col`}>
         <div className="p-4 flex items-center justify-between border-b border-gray-200">
-          {sidebarOpen && (
-            <h1 className="font-bold text-xl text-[#0EA5A4]">CFITP Portal</h1>
-          )}
-
-          <button
-            onClick={toggleSidebar}
-            className="p-2 rounded-lg hover:bg-[#0EA5A4]/20"
-          >
+          {sidebarOpen && <h1 className="font-bold text-xl text-[#0EA5A4]">CFITP Portal</h1>}
+          <button onClick={toggleSidebar} className="p-2 rounded-lg hover:bg-[#0EA5A4]/20">
             {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
         </div>
@@ -98,17 +55,13 @@ export default function AppShell() {
         <nav className="flex-1 p-4 space-y-2">
           {menuItems.map(({ path, label, icon: Icon }) => {
             const active = currentPath.startsWith(path);
-
             return (
               <button
                 key={path}
                 onClick={() => navigate(path)}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-all
-                  ${
-                    active
-                      ? "bg-[#0EA5A4] text-white shadow-sm"
-                      : "hover:bg-[#0EA5A4]/20 text-slate-700"
-                  }`}
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-all ${
+                  active ? "bg-[#0EA5A4] text-white shadow-sm" : "hover:bg-[#0EA5A4]/20 text-slate-700"
+                }`}
               >
                 <Icon size={20} />
                 {sidebarOpen && <span>{label}</span>}
@@ -133,29 +86,14 @@ export default function AppShell() {
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col">
-        <header className="bg-[#0F172A] text-white px-6 py-4 flex items-center justify-between shadow">
+        <header className="bg-[#0F172A] text-white px-6 py-4 shadow flex justify-between items-center">
           <h2 className="text-lg font-semibold">
-            {menuItems.find((i) => currentPath.startsWith(i.path))?.label ||
-              "CFITP"}
+            {menuItems.find(i => currentPath.startsWith(i.path))?.label || "CFITP"}
           </h2>
-
-          <div className="flex items-center gap-4">
-            <button className="p-2 hover:bg-gray-800 rounded-lg">
-              <Bell size={20} />
-            </button>
-
-            <button
-              onClick={() => {
-                localStorage.clear();
-                navigate("/login");
-              }}
-              className="p-2 hover:bg-gray-800 rounded-lg text-red-400"
-            >
-              <LogOut size={20} />
-            </button>
-          </div>
+          <button className="p-2 hover:bg-gray-800 rounded-lg">
+            <Bell size={20} />
+          </button>
         </header>
-
         <main className="flex-1 p-6 bg-gray-50">
           <Outlet />
         </main>
