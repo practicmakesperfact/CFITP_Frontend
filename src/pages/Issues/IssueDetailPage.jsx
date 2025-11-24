@@ -1,4 +1,4 @@
-// src/pages/Issues/IssueDetailPage.jsx
+
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import mockIssues from "../../api/mockIssues.js";
@@ -8,6 +8,10 @@ import FileUploader from "../../components/UI/FileUploader.jsx";
 import { motion } from "framer-motion";
 import { useState } from "react";
 import { ArrowLeft, Edit3 } from "lucide-react";
+import { useUIStore } from "../../app/store/uiStore.js";
+import AssignModal from "../../components/Issues/AssignModal.jsx";
+import IssueStatusActions from "../../components/Issues/IssueStatusActions.jsx";
+import toast from "react-hot-toast";
 
 export default function IssueDetailPage() {
   const { id } = useParams();
@@ -17,10 +21,14 @@ export default function IssueDetailPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState("");
   const [editDesc, setEditDesc] = useState("");
+  const [assignOpen, setAssignOpen] = useState(false);
+
+  const { userRole, setUserRole } = useUIStore();
 
   const { data: issueRes, isLoading } = useQuery({
     queryKey: ["issues", id],
     queryFn: () => mockIssues.retrieve(id),
+    keepPreviousData: true,
   });
 
   const commentsQuery = useQuery({
@@ -31,28 +39,39 @@ export default function IssueDetailPage() {
   const uploadMutation = useMutation({
     mutationFn: ({ issueId, file }) =>
       mockIssues.attachments.upload(issueId, file),
-    onSuccess: () => queryClient.invalidateQueries(["issues", id]),
+    onSuccess: () => {
+      queryClient.invalidateQueries(["issues", id]);
+      queryClient.invalidateQueries(["comments", id]);
+      toast.success("Attachment uploaded");
+    },
     onSettled: () => setUploading(false),
   });
 
   const statusMutation = useMutation({
-    mutationFn: (status) => mockIssues.update(id, { status }),
+    mutationFn: (status) => mockIssues.transition(id, status),
     onSuccess: () => {
       queryClient.invalidateQueries(["issues", id]);
-      mockIssues.comments.create(id, {
-        content: `**Issue ${issue.status === "open" ? "closed" : "reopened"}**`,
-        author: "System",
-      });
       queryClient.invalidateQueries(["comments", id]);
+    },
+  });
+
+  const assignMutation = useMutation({
+    mutationFn: ({ assignee_name, assignee_email }) =>
+      mockIssues.assign(id, { assignee_name, assignee_email }),
+    onSuccess: () => {
+      queryClient.invalidateQueries(["issues", id]);
+      queryClient.invalidateQueries(["issues"]);
+      toast.success("Assigned successfully");
+      setAssignOpen(false);
     },
   });
 
   const editMutation = useMutation({
     mutationFn: (data) => mockIssues.update(id, data),
     onSuccess: (response) => {
-      // THIS LINE FIXES THE PROBLEM — updates the cache instantly
-      queryClient.setQueryData(["issues", id], response);
+      queryClient.invalidateQueries(["issues", id]);
       setIsEditing(false);
+      toast.success("Issue updated");
     },
   });
 
@@ -64,16 +83,15 @@ export default function IssueDetailPage() {
   const issue = issueRes?.data;
   const comments = commentsQuery.data?.data || [];
 
-  // Edit mode
+  // Edit mode UI
   if (isEditing) {
     return (
       <motion.div className="max-w-6xl mx-auto space-y-8">
         <button
-          onClick={() => navigate("/issues")}
+          onClick={() => navigate(-1)}
           className="flex items-center gap-2 text-slate-600 hover:text-[#0EA5A4] transition mb-6"
         >
-          <ArrowLeft size={20} />
-          Back to Issues
+          <ArrowLeft size={20} /> Back
         </button>
 
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
@@ -91,7 +109,10 @@ export default function IssueDetailPage() {
           <div className="mt-6 flex gap-3">
             <button
               onClick={() =>
-                editMutation.mutate({ title: editTitle, description: editDesc })
+                editMutation.mutate({
+                  title: editTitle || issue.title,
+                  description: editDesc || issue.description,
+                })
               }
               className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-xl font-medium"
             >
@@ -111,24 +132,49 @@ export default function IssueDetailPage() {
 
   return (
     <motion.div className="max-w-7xl mx-auto pb-20">
-      {/* Top Bar: Back + Edit */}
+      {/* Top Bar: Back + Role-specific controls */}
       <div className="flex items-center justify-between mb-6">
         <button
-          onClick={() => navigate("/issues")}
+          onClick={() => navigate(-1)}
           className="flex items-center gap-2 text-slate-600 hover:text-[#0EA5A4] transition"
         >
-          <ArrowLeft size={20} />
-          Back to Issues
+          <ArrowLeft size={20} /> Back
         </button>
 
-        {/* Edit Button */}
-        <button
-          onClick={() => setIsEditing(true)}
-          className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
-        >
-          <Edit3 size={18} />
-          Edit
-        </button>
+        <div className="flex items-center gap-3">
+          {/* Edit allowed to creator or manager/admin */}
+          {(() => {
+            const user = JSON.parse(
+              localStorage.getItem("user_profile") || "{}"
+            );
+            const isCreator = user.email === issue.created_by;
+            if (userRole === "manager" || userRole === "admin" || isCreator) {
+              return (
+                <button
+                  onClick={() => {
+                    setIsEditing(true);
+                    setEditTitle(issue.title);
+                    setEditDesc(issue.description);
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
+                >
+                  <Edit3 size={18} /> Edit
+                </button>
+              );
+            }
+            return null;
+          })()}
+
+          {/* Manager: Open Assign modal */}
+          {userRole === "manager" && (
+            <button
+              onClick={() => setAssignOpen(true)}
+              className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
+            >
+              Assign Staff
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-10">
@@ -136,19 +182,40 @@ export default function IssueDetailPage() {
         <div className="lg:col-span-3 space-y-8">
           {/* Title + Status */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-            <h1 className="text-3xl text-slate-800 mb-4">
-              {issue.title}
-              <span className="text-xl text-slate-500 ml-3">#{issue.id}</span>
-            </h1>
-            <span
-              className={`px-4 py-1.5 rounded-full ${
-                issue.status === "open"
-                  ? "bg-emerald-100 text-emerald-700"
-                  : "bg-gray-100 text-gray-700"
-              }`}
-            >
-              {issue.status.replace("-", " ")}
-            </span>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h1 className="text-3xl text-slate-800 mb-1">
+                  {issue.title}{" "}
+                  <span className="text-xl text-slate-500 ml-3">
+                    #{issue.id}
+                  </span>
+                </h1>
+                <div className="flex items-center gap-3">
+                  <span
+                    className={`px-3 py-1.5 rounded-full text-sm ${
+                      issue.status === "open"
+                        ? "bg-emerald-100 text-emerald-700"
+                        : issue.status === "in-progress"
+                        ? "bg-amber-100 text-amber-700"
+                        : "bg-gray-100 text-gray-700"
+                    }`}
+                  >
+                    {issue.status.replace("-", " ")}
+                  </span>
+                  <span className="text-sm text-slate-500">
+                    Opened by {issue.created_by_name}
+                  </span>
+                </div>
+              </div>
+
+              {/* Staff-only status actions */}
+              {userRole === "staff" && (
+                <IssueStatusActions
+                  issue={issue}
+                  onChange={(s) => statusMutation.mutate(s)}
+                />
+              )}
+            </div>
           </div>
 
           {/* Original Issue */}
@@ -159,7 +226,9 @@ export default function IssueDetailPage() {
               </div>
               <div className="flex-1">
                 <div className="flex items-center gap-3 mb-3">
-                  <span className="font-medium text-slate-800">Admin</span>
+                  <span className="font-medium text-slate-800">
+                    {issue.created_by_name}
+                  </span>
                   <span className="text-sm text-slate-500">
                     opened this issue on{" "}
                     {new Date(issue.created_at).toLocaleDateString()}
@@ -170,6 +239,23 @@ export default function IssueDetailPage() {
                     {issue.description}
                   </p>
                 </div>
+
+                {/* attachments inline */}
+                {issue.attachments && issue.attachments.length > 0 && (
+                  <div className="mt-6 grid grid-cols-3 gap-3">
+                    {issue.attachments.map((att) => (
+                      <a
+                        key={att.id}
+                        href={att.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="block p-2 bg-gray-50 rounded-lg border border-gray-200 text-sm text-[#0EA5A4] hover:bg-gray-100"
+                      >
+                        {att.filename || `attachment-${att.id}`}
+                      </a>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -181,46 +267,70 @@ export default function IssueDetailPage() {
             ))}
           </div>
 
-          {/* Comment Editor + Close Button */}
+          {/* Comment Editor + Status (client can close/reopen) */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <CommentEditor
               issueId={id}
               onPosted={() => queryClient.invalidateQueries(["comments", id])}
             />
 
-            {/* Close/Reopen Button */}
-            <div className="mt-6 flex justify-end">
-              <button
-                onClick={() =>
-                  statusMutation.mutate(
-                    issue.status === "open" ? "closed" : "open"
-                  )
-                }
-                className={`px-8 py-3 rounded-xl font-medium transition ${
-                  issue.status === "open"
-                    ? "bg-red-600 hover:bg-red-700 text-white"
-                    : "bg-emerald-600 hover:bg-emerald-700 text-white"
-                }`}
-              >
-                {issue.status === "open" ? "Close Issue" : "Reopen Issue"}
-              </button>
+            <div className="mt-6 flex justify-between items-center">
+              {/* Client: close / reopen */}
+              {userRole === "client" && (
+                <button
+                  onClick={() =>
+                    statusMutation.mutate(
+                      issue.status === "open" ? "closed" : "open"
+                    )
+                  }
+                  className={`px-6 py-3 rounded-xl font-medium transition ${
+                    issue.status === "open"
+                      ? "bg-red-600 hover:bg-red-700 text-white"
+                      : "bg-emerald-600 hover:bg-emerald-700 text-white"
+                  }`}
+                >
+                  {issue.status === "open" ? "Close Issue" : "Reopen Issue"}
+                </button>
+              )}
+
+              {/* placeholder for right aligned small hint */}
+              <div className="text-sm text-slate-500">
+                Comments are public to issue participants. Use @ to mention.
+              </div>
             </div>
           </div>
         </div>
 
-        {/* RIGHT SIDEBAR — Assignee, Labels, Milestone, Attachments */}
+        {/* RIGHT SIDEBAR */}
         <div className="lg:col-span-1 space-y-6">
           {/* Assignee */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
             <h3 className="text-lg font-semibold text-slate-800 mb-4">
               Assignee
             </h3>
-            <select className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm text-slate-700">
-              <option>No one — assign yourself</option>
-              <option>John (Staff)</option>
-              <option>Sarah (Developer)</option>
-              <option>You</option>
-            </select>
+            <div className="text-sm text-slate-600">
+              {issue.assignee_name ? (
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="font-medium">{issue.assignee_name}</div>
+                    <div className="text-xs text-slate-500">
+                      {issue.assignee_email}
+                    </div>
+                  </div>
+                  <div className="text-xs text-slate-400">Assigned</div>
+                </div>
+              ) : (
+                <div className="text-slate-500">No one assigned</div>
+              )}
+            </div>
+            {userRole === "manager" && (
+              <button
+                onClick={() => setAssignOpen(true)}
+                className="mt-4 w-full px-4 py-2 rounded-xl border border-gray-300 text-sm"
+              >
+                Assign / Reassign
+              </button>
+            )}
           </div>
 
           {/* Labels */}
@@ -229,9 +339,6 @@ export default function IssueDetailPage() {
               Labels
             </h3>
             <p className="text-slate-500 text-sm">None yet</p>
-            <button className="mt-3 text-[#0EA5A4] text-sm hover:underline font-medium">
-              Add label
-            </button>
           </div>
 
           {/* Milestone */}
@@ -240,9 +347,6 @@ export default function IssueDetailPage() {
               Milestone
             </h3>
             <p className="text-slate-500 text-sm">No milestone</p>
-            <button className="mt-3 text-[#0EA5A4] text-sm hover:underline font-medium">
-              Set milestone
-            </button>
           </div>
 
           {/* Attachments */}
@@ -251,10 +355,7 @@ export default function IssueDetailPage() {
             <FileUploader
               onUpload={(file) => {
                 setUploading(true);
-                uploadMutation.mutate(
-                  { issueId: id, file },
-                  { onSettled: () => setUploading(false) }
-                );
+                uploadMutation.mutate({ issueId: id, file });
               }}
               isUploading={uploading}
             />
@@ -285,6 +386,15 @@ export default function IssueDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Assign Modal */}
+      {assignOpen && (
+        <AssignModal
+          issue={issue}
+          onClose={() => setAssignOpen(false)}
+          onAssign={(assignee) => assignMutation.mutate(assignee)}
+        />
+      )}
     </motion.div>
   );
 }

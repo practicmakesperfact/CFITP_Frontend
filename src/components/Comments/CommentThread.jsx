@@ -14,12 +14,10 @@ export default function CommentThread({ comments = [] }) {
     <div className="space-y-8">
       {comments.map((comment) => (
         <div key={comment.id} className="flex gap-4">
-          {/* Avatar */}
           <div className="w-10 h-10 bg-[#0EA5A4] rounded-full flex items-center justify-center text-white font-bold text-lg flex-shrink-0">
-            {comment.author[0].toUpperCase()}
+            {String(comment.author || "U")[0].toUpperCase()}
           </div>
 
-          {/* Comment Bubble - Light & Clean */}
           <div className="flex-1">
             <div className="bg-gray-50 rounded-2xl px-6 py-4 border border-gray-200">
               <div className="flex items-center gap-3 mb-2">
@@ -36,6 +34,23 @@ export default function CommentThread({ comments = [] }) {
               <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">
                 {comment.content}
               </p>
+
+              {/* attachments */}
+              {comment.attachments && comment.attachments.length > 0 && (
+                <div className="mt-3 grid grid-cols-3 gap-2">
+                  {comment.attachments.map((att, i) => (
+                    <a
+                      key={i}
+                      href={att.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-sm p-2 bg-white border rounded-md block"
+                    >
+                      {att.filename || `file-${i + 1}`}
+                    </a>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -1,4 +1,4 @@
-// src/pages/Issues/IssuesPage.jsx
+
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -14,24 +14,28 @@ export default function IssuesPage() {
   const [search, setSearch] = useState("");
 
   const { data: issuesData, isLoading } = useQuery({
-    queryKey: ["issues"], // Shared cache
+    queryKey: ["issues"],
     queryFn: () => issuesApi.list(),
   });
 
   const allIssues = issuesData?.data || [];
+  const meEmail = JSON.parse(
+    localStorage.getItem("user_profile") || "{}"
+  ).email;
+
   const issues =
     userRole === "client"
       ? allIssues.filter(
-          (i) =>
-            i.created_by === "client@cfitp.com" ||
-            i.created_by === localStorage.getItem("user_profile")?.email
+          (i) => i.created_by === meEmail || i.created_by === "client@cfitp.com"
         )
-      : allIssues;
+      : userRole === "staff"
+      ? allIssues.filter((i) => i.assignee_email === meEmail)
+      : allIssues; // manager & admin see all
 
   const filteredIssues = issues.filter(
     (issue) =>
       issue.title.toLowerCase().includes(search.toLowerCase()) ||
-      issue.description.toLowerCase().includes(search.toLowerCase())
+      (issue.description || "").toLowerCase().includes(search.toLowerCase())
   );
 
   return (
@@ -50,6 +54,7 @@ export default function IssuesPage() {
             {filteredIssues.length} issues found
           </p>
         </div>
+
         {userRole === "client" && (
           <button
             onClick={() => navigate("/issues/new")}
@@ -81,14 +86,16 @@ export default function IssuesPage() {
         <div className="text-center py-40 bg-white rounded-3xl shadow-2xl">
           <p className="text-8xl text-gray-200 mb-8">Empty</p>
           <p className="text-3xl text-slate-600 mb-10">
-            You haven't created any issues yet
+            No issues matched your search
           </p>
-          <button
-            onClick={() => navigate("/issues/new")}
-            className="bg-[#0EA5A4] text-white px-12 py-6 rounded-2xl text-2xl hover:bg-[#0d8c8b] transition shadow-2xl"
-          >
-            Create Your First Issue
-          </button>
+          {userRole === "client" && (
+            <button
+              onClick={() => navigate("/issues/new")}
+              className="bg-[#0EA5A4] text-white px-12 py-6 rounded-2xl text-2xl hover:bg-[#0d8c8b] transition shadow-2xl"
+            >
+              Create Your First Issue
+            </button>
+          )}
         </div>
       ) : (
         <div className="grid gap-8 md:grid-cols-2 xl:grid-cols-3">

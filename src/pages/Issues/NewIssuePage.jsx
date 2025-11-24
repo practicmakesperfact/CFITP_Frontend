@@ -1,13 +1,14 @@
+
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import * as yup from "yup";
 import toast from "react-hot-toast";
-import { ArrowLeft, Upload, X } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { motion } from "framer-motion";
 import { useUIStore } from "../../app/store/uiStore.js";
-import mockIssues from "../../api/mockIssues.js"; // Your existing mock
+import mockIssues from "../../api/mockIssues.js";
 import FileUploader from "../../components/UI/FileUploader.jsx";
 
 const schema = yup.object({
@@ -51,60 +52,63 @@ export default function NewIssuePage() {
     reset,
   } = useForm({
     resolver: yupResolver(schema),
+    defaultValues: { priority: "medium" },
   });
+  const userProfile = JSON.parse(localStorage.getItem("user_profile") || "{}");
 
   const onSubmit = async (data) => {
     setIsSubmitting(true);
-
     try {
-      // Convert files to base64 for localStorage
+      // convert files to base64 (for mock)
       const attachments = await Promise.all(
         files.map(async (file) => {
-          const base64 = await fileToBase64(file);
+          if (!file) return null;
+          if (typeof file === "string" && file.startsWith("data:")) {
+            return {
+              id: Date.now() + Math.random(),
+              filename: file.name || "file",
+              url: file,
+            };
+          }
+          const reader = new FileReader();
+          const base64 = await new Promise((res, rej) => {
+            reader.onload = () => res(reader.result);
+            reader.onerror = (e) => rej(e);
+            reader.readAsDataURL(file);
+          });
           return {
             id: Date.now() + Math.random(),
-            name: file.name,
-            size: file.size,
-            type: file.type,
-            base64,
-            url: base64, // preview
+            filename: file.name,
+            url: base64,
           };
         })
       );
 
-      const newIssue = {
-        ...data,
-        id: Date.now(),
+      const newIssuePayload = {
+        title: data.title,
+        description: data.description,
+        priority: data.priority,
         status: "open",
-        created_at: new Date().toISOString(),
-        created_by: "client@cfitp.com", // current user
+        created_by: userProfile.email || "client@cfitp.com",
+        created_by_name:
+          userProfile.first_name || userProfile.email || "Client",
         attachments,
       };
 
-      // Save using your existing mock (which uses localStorage)
-      await mockIssues.create(newIssue);
+      await mockIssues.create(newIssuePayload);
 
       toast.success(
         "Issue submitted successfully! Our team will review it shortly."
       );
       reset();
       setFiles([]);
-      setTimeout(() => navigate("/issues"), 1500);
+      setTimeout(() => navigate("/issues"), 600);
     } catch (err) {
+      console.error(err);
       toast.error("Failed to submit issue. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  // Helper: Convert file to base64
-  const fileToBase64 = (file) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = (error) => reject(error);
-    });
   };
 
   return (
@@ -117,8 +121,7 @@ export default function NewIssuePage() {
         onClick={() => navigate(-1)}
         className="flex items-center gap-2 text-slate-600 hover:text-slate-800 mb-8 font-medium"
       >
-        <ArrowLeft size={22} />
-        Back to Issues
+        <ArrowLeft size={22} /> Back to Issues
       </button>
 
       <h1 className="text-4xl font-bold text-slate-800 mb-10">
@@ -129,7 +132,6 @@ export default function NewIssuePage() {
         onSubmit={handleSubmit(onSubmit)}
         className="bg-white rounded-3xl shadow-xl p-10 space-y-10"
       >
-        {/* Title */}
         <div>
           <label className="block text-lg font-semibold text-slate-700 mb-3">
             Issue Title
@@ -144,7 +146,6 @@ export default function NewIssuePage() {
           )}
         </div>
 
-        {/* Description */}
         <div>
           <label className="block text-lg font-semibold text-slate-700 mb-3">
             Describe the Problem
@@ -162,7 +163,6 @@ export default function NewIssuePage() {
           )}
         </div>
 
-        {/* Priority */}
         <div>
           <label className="block text-lg font-semibold text-slate-700 mb-5">
             Priority Level
@@ -171,7 +171,7 @@ export default function NewIssuePage() {
             {["low", "medium", "high"].map((level) => (
               <label
                 key={level}
-                className="flex items-center gap-4 p-5 bg-gray-50 rounded-2xl cursor-pointer hover:bg-gray-100 transition border-2 border-transparent has-[:checked]:border-[#0EA5A4] has-[:checked]:bg-teal-50"
+                className="flex items-center gap-4 p-5 bg-gray-50 rounded-2xl cursor-pointer hover:bg-gray-100 transition border-2 border-transparent"
               >
                 <input
                   type="radio"
@@ -188,7 +188,6 @@ export default function NewIssuePage() {
           </div>
         </div>
 
-        {/* File Upload */}
         <div>
           <label className="block text-lg font-semibold text-slate-700 mb-4">
             Attachments (Optional)
@@ -196,7 +195,6 @@ export default function NewIssuePage() {
           <FileUploader files={files} setFiles={setFiles} />
         </div>
 
-        {/* Submit Buttons */}
         <div className="flex gap-5 pt-8 border-t border-gray-200">
           <button
             type="submit"
