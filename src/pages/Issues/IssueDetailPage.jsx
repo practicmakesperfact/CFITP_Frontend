@@ -218,49 +218,49 @@ export default function IssueDetailPage() {
             </div>
           </div>
 
-          {/* Original Issue */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-            <div className="flex gap-4">
-              <div className="w-12 h-12 bg-[#0EA5A4] rounded-full flex items-center justify-center text-white font-bold text-xl">
-                A
-              </div>
-              <div className="flex-1">
-                <div className="flex items-center gap-3 mb-3">
-                  <span className="font-medium text-slate-800">
+          {/* Original Issue  */}
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+                <div className="flex gap-4">
+                  <div className="w-12 h-12 bg-[#0EA5A4] rounded-full flex items-center justify-center text-white font-bold text-xl">
+                  C
+                  </div>
+                  <div className="flex-1">
+                  <div className="flex items-center gap-3 mb-3">
+                    <span className="font-medium text-slate-800">
                     {issue.created_by_name}
-                  </span>
-                  <span className="text-sm text-slate-500">
+                    </span>
+                    <span className="text-sm text-slate-500">
                     opened this issue on{" "}
                     {new Date(issue.created_at).toLocaleDateString()}
-                  </span>
-                </div>
-                <div className="prose prose-slate max-w-none">
-                  <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">
+                    </span>
+                  </div>
+                  <div className="prose prose-slate max-w-none">
+                    <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">
                     {issue.description}
-                  </p>
-                </div>
+                    </p>
+                  </div>
 
-                {/* attachments inline */}
-                {issue.attachments && issue.attachments.length > 0 && (
-                  <div className="mt-6 grid grid-cols-3 gap-3">
+                  {/* attachments inline */}
+                  {issue.attachments && issue.attachments.length > 0 && (
+                    <div className="mt-6 grid grid-cols-3 gap-3">
                     {issue.attachments.map((att) => (
                       <a
-                        key={att.id}
-                        href={att.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="block p-2 bg-gray-50 rounded-lg border border-gray-200 text-sm text-[#0EA5A4] hover:bg-gray-100"
+                      key={att.id}
+                      href={att.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block p-2 bg-gray-50 rounded-lg border border-gray-200 text-sm text-[#0EA5A4] hover:bg-gray-100"
                       >
-                        {att.filename || `attachment-${att.id}`}
+                      {att.filename || `attachment-${att.id}`}
                       </a>
                     ))}
+                    </div>
+                  )}
                   </div>
-                )}
-              </div>
-            </div>
-          </div>
+                </div>
+                </div>
 
-          {/* Comments */}
+                {/* Comments */}
           <div className="space-y-8">
             {[...comments].reverse().map((comment) => (
               <CommentThread key={comment.id} comments={[comment]} />

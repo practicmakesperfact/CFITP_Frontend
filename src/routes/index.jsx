@@ -7,6 +7,7 @@ import AppShell from "../components/Layout/AppShell.jsx";
 // Auth Pages
 import Login from "../pages/Auth/Login.jsx";
 import Register from "../pages/Auth/Register.jsx";
+import MyFeedback from "../pages/Feedback/MyFeedback";
 
 // Dashboard
 import ClientDashboard from "../pages/Dashboards/ClientDashboard.jsx";
@@ -75,6 +76,7 @@ const router = createBrowserRouter([
         path: "/issues",
         element: <ProtectedRoute><IssuesPage /></ProtectedRoute>,
       },
+   
       {
         path: "/issues/new",
         element: <ProtectedRoute><NewIssuePage /></ProtectedRoute>,
@@ -89,6 +91,10 @@ const router = createBrowserRouter([
         path: "/feedback/new",
         element: <ProtectedRoute><FeedbackPage /></ProtectedRoute>,
       },
+      {
+      path: "/feedback/my",
+      element: <MyFeedback />
+    },
 
       // Profile - All
       { path: "/profile", element: <ProtectedRoute><ProfilePage /></ProtectedRoute> },

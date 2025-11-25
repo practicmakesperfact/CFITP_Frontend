@@ -1,103 +1,184 @@
+// src/pages/Dashboards/AdminDashboard.jsx
 import { useQuery } from "@tanstack/react-query";
-import { Users, Bug, AlertTriangle, TrendingUp } from "lucide-react";
-import KpiCard from "../../components/Dashboard/KpiCard";
-import Chart from "react-apexcharts";
 import { motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
+import {
+  AlertTriangle,
+  Clock,
+  CheckCircle,
+  ClipboardList,
+  UserCog,
+  MessageSquare,
+} from "lucide-react";
+import { issuesApi } from "../../api/issuesApi";
+import { useAuth } from "../../app/hooks";
+import KpiCard from "../../components/Dashboard/KpiCard";
+import ChartCard from "../../components/Dashboard/ChartCard";
+import IssueCard from "../../components/Issues/IssueCard";
+import Lottie from "lottie-react";
+import emptyAnimation from "../../assets/illustrations/empty-state.json";
+import { useState, useEffect } from "react";
+import { formatDistanceToNow } from "date-fns";
 
 export default function AdminDashboard() {
-  const { data: issues } = useQuery({
-    queryKey: ["issues", "all"],
-    queryFn: () => issuesApi.list(),
+  const navigate = useNavigate();
+  const { user } = useAuth();
+
+  const [feedback, setFeedback] = useState([]);
+
+  useEffect(() => {
+    const load = () => {
+      const data = JSON.parse(localStorage.getItem("cfitp_feedback") || "[]");
+      setFeedback(data.sort((a, b) => new Date(b.date) - new Date(a.date)));
+    };
+    load();
+    window.addEventListener("storage", load);
+    return () => window.removeEventListener("storage", load);
+  }, []);
+
+  const { data: issuesResponse, isLoading } = useQuery({
+    queryKey: ["issues"],
+    queryFn: issuesApi.list,
   });
 
-  const { data: users } = useQuery({
-    queryKey: ["users", "stats"],
-    queryFn: () => authApi.me().then(() => ({ total: 48, active: 42 })), // mock
-  });
+  const issues = issuesResponse?.data || [];
 
-  const totalIssues = issues?.data?.length || 0;
-  const criticalIssues =
-    issues?.data?.filter((i) => i.priority === "critical").length || 0;
+  const openCount = issues.filter((i) => i.status === "open").length;
+  const inProgressCount = issues.filter(
+    (i) => i.status === "in-progress"
+  ).length;
+  const resolvedCount = issues.filter((i) =>
+    ["resolved", "closed"].includes(i.status)
+  ).length;
 
-  const trendOptions = {
-    chart: { toolbar: { show: false }, type: "area" },
-    stroke: { curve: "smooth" },
-    fill: { opacity: 0.3 },
-    colors: ["#0EA5A4"],
-    dataLabels: { enabled: false },
+  const statusChartData = {
+    series: [openCount, inProgressCount, resolvedCount],
+    labels: ["Open", "In Progress", "Resolved"],
   };
 
-  const trendSeries = [{ name: "Issues", data: [30, 40, 35, 50, 49, 60, 70] }];
+  const dailyCounts = Array(7).fill(0);
+  issues.forEach((issue) => {
+    const day = new Date(issue.created_at).getDay();
+    dailyCounts[day] += 1;
+  });
 
-  const cardClass = "bg-white border border-gray-200 rounded-xl p-6 shadow-sm";
+  const dailyChartData = {
+    series: [{ name: "New Issues", data: dailyCounts }],
+    categories: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+  };
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-      <h1 className="text-3xl font-bold text-slate-800 mb-8">System Admin</h1>
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="space-y-10"
+    >
+      <div className="flex items-center justify-between">
+        <h1 className="text-4xl font-bold text-slate-800">Admin Dashboard</h1>
+        <div className="flex items-center gap-3 bg-white border border-gray-200 shadow-sm px-6 py-3 rounded-xl">
+          <UserCog className="text-[#0EA5A4]" size={24} />
+          <span className="font-medium text-slate-700">
+            {user?.first_name || user?.email}
+          </span>
+        </div>
+      </div>
 
-      {/* KPI CARDS */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <KpiCard title="Total Users" value={users?.total || 0} icon={Users} />
-        <KpiCard title="Active Users" value={users?.active || 0} icon={Users} />
-        <KpiCard title="Total Issues" value={totalIssues} icon={Bug} />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <KpiCard
-          title="Critical Issues"
-          value={criticalIssues}
+          title="Open Issues"
+          value={openCount}
           icon={AlertTriangle}
+          color="red"
+        />
+        <KpiCard
+          title="In Progress"
+          value={inProgressCount}
+          icon={Clock}
+          color="amber"
+        />
+        <KpiCard
+          title="Resolved"
+          value={resolvedCount}
+          icon={CheckCircle}
+          color="emerald"
+        />
+        <KpiCard
+          title="Total Issues"
+          value={issues.length}
+          icon={ClipboardList}
+          color="teal"
         />
       </div>
 
-      {/* CHARTS */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className={`${cardClass} lg:col-span-2`}>
-          <h3 className="text-lg font-semibold text-slate-800 mb-4">
-            Issue Trend (7 days)
-          </h3>
-          <Chart
-            options={trendOptions}
-            series={trendSeries}
-            type="area"
-            height={300}
-          />
-        </div>
-
-        <div className={cardClass}>
-          <h3 className="text-lg font-semibold text-slate-800 mb-4">
-            User Growth
-          </h3>
-          <Chart
-            options={{
-              chart: { type: "line", toolbar: { show: false } },
-              stroke: { curve: "smooth" },
-              colors: ["#FB923C"],
-              dataLabels: { enabled: false },
-            }}
-            series={[{ data: [10, 20, 28, 35, 40, 45, 48] }]}
-            type="line"
-            height={300}
-          />
-        </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <ChartCard
+          title="Issue Status Distribution"
+          type="pie"
+          data={statusChartData}
+        />
+        <ChartCard
+          title="Issues Created This Week"
+          type="line"
+          data={dailyChartData}
+        />
       </div>
 
-      {/* AUDIT LOG */}
-      <div className={`${cardClass} mt-8`}>
-        <h3 className="text-lg font-semibold text-slate-800 mb-4">
-          Recent Audit Log
-        </h3>
+      {/* CLIENT FEEDBACK — VISIBLE ONLY TO ADMIN */}
+      <div className="bg-white rounded-3xl shadow-xl border border-gray-200 p-10">
+        <h2 className="text-3xl font-bold text-slate-800 mb-8 flex items-center gap-4">
+          <MessageSquare className="text-[#0EA5A4]" size={32} />
+          Client Feedback ({feedback.length})
+        </h2>
 
-        <div className="text-sm text-slate-600 space-y-2">
-          <p>
-            <b>Admin</b> created user <code>jane@company.com</code> — 2h ago
-          </p>
-          <p>
-            <b>Backup</b> completed successfully — 6h ago
-          </p>
-          <p>
-            <b>System</b> generated monthly report — 1d ago
-          </p>
-        </div>
+        {feedback.length === 0 ? (
+          <div className="text-center py-16">
+            <Lottie animationData={emptyAnimation} className="w-64 mx-auto" />
+            <p className="text-xl text-slate-600 mt-6">
+              No feedback from clients yet
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {feedback.map((item) => (
+              <div
+                key={item.id}
+                className={`p-6 rounded-2xl border-2 ${
+                  item.read
+                    ? "border-gray-200 bg-gray-50"
+                    : "border-[#0EA5A4] bg-teal-50 shadow-md"
+                }`}
+              >
+                <div className="flex justify-between mb-3">
+                  <p className="font-bold text-lg">Client</p>
+                  <span className="text-sm text-slate-500">
+                    {formatDistanceToNow(new Date(item.date), {
+                      addSuffix: true,
+                    })}
+                  </span>
+                </div>
+                <p className="text-slate-700">{item.text}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* All Issues */}
+      <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-10">
+        <h2 className="text-3xl font-bold text-slate-800 mb-8">All Issues</h2>
+        {issues.length === 0 ? (
+          <div className="text-center py-20">
+            <Lottie animationData={emptyAnimation} className="w-72 mx-auto" />
+            <p className="text-slate-600 mt-4 text-lg">No issues found</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            {issues.map((issue) => (
+              <IssueCard issue={issue} key={issue.id} />
+            ))}
+          </div>
+        )}
       </div>
     </motion.div>
   );
 }
-

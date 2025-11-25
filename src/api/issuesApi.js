@@ -1,42 +1,44 @@
 
 import mockIssues from "./mockIssues.js";
 
-const delay = (ms = 600) => new Promise((res) => setTimeout(res, ms));
+/**
+ * issuesApi is a tiny adapter that returns objects shaped like axios responses
+ * (i.e., { data: ... }), which keeps the rest of your code (useQuery, etc.) unchanged.
+ */
 
 export const issuesApi = {
-  // List all issues (for client: only their own later)
   list: async (params = {}) => {
-    await delay();
-    const result = await mockIssues.list();
-    return result; // { data: [...] }
+    return await mockIssues.list(params);
   },
-
-  // Create newi issue
   create: async (payload) => {
-    await delay(800);
-    const result = await mockIssues.create(payload);
-
-    // Show success toast (optional, but nice)
-    if (typeof window !== "undefined") {
-      const toast = await import("react-hot-toast").then((m) => m.default);
-      toast.success("Issue submitted successfully!");
-    }
-
-    return result;
+    return await mockIssues.create(payload);
   },
-
   retrieve: async (id) => {
-    await delay();
-    return mockIssues.retrieve(id);
+    return await mockIssues.retrieve(id);
   },
-
   update: async (id, payload) => {
-    await delay();
-    return mockIssues.update(id, payload);
+    return await mockIssues.update(id, payload);
+  },
+  assign: async (id, assignee) => {
+    return await mockIssues.assign(id, assignee);
+  },
+  transition: async (id, status) => {
+    return await mockIssues.transition(id, status);
+  },
+  delete: async (id) => {
+    return await mockIssues.delete(id);
   },
 
-  // Not needed for client MVP
-  assign: () => {},
-  transition: () => {},
-  delete: () => {},
+  // attachments
+  uploadAttachment: async (issueId, file) => {
+    return await mockIssues.attachments.upload(issueId, file);
+  },
+
+  // comments
+  listComments: async (issueId) => {
+    return await mockIssues.comments.list(issueId);
+  },
+  createComment: async (issueId, data) => {
+    return await mockIssues.comments.create(issueId, data);
+  },
 };

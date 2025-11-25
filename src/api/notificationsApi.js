@@ -1,6 +1,14 @@
-import axiosClient from "./axiosClient.js";
+
+import mockIssues from "./mockIssues.js";
 
 export const notificationsApi = {
-  list: () => axiosClient.get("/notifications/"),
-  markRead: (id) => axiosClient.post(`/notifications/${id}/mark-read/`),
+  list: async () => {
+    return await mockIssues.notifications.list();
+  },
+  markRead: async (id) => {
+    return await mockIssues.notifications.markRead(id);
+  },
+  markAllRead: async () => {
+    return await mockIssues.notifications.markAllRead();
+  },
 };

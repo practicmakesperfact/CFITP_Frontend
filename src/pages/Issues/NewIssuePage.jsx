@@ -1,168 +1,106 @@
 
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useForm } from "react-hook-form";
-import { yupResolver } from "@hookform/resolvers/yup";
-import * as yup from "yup";
-import toast from "react-hot-toast";
-import { ArrowLeft } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { useUIStore } from "../../app/store/uiStore.js";
-import mockIssues from "../../api/mockIssues.js";
+import { ArrowLeft } from "lucide-react";
 import FileUploader from "../../components/UI/FileUploader.jsx";
-
-const schema = yup.object({
-  title: yup.string().required("Title is required"),
-  description: yup.string().required("Description is required"),
-  priority: yup.string().oneOf(["low", "medium", "high"]).default("medium"),
-});
+import mockIssues from "../../api/mockIssues.js";
+import toast from "react-hot-toast";
 
 export default function NewIssuePage() {
   const navigate = useNavigate();
-  const { userRole } = useUIStore();
-  const [files, setFiles] = useState([]);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const queryClient = useQueryClient();
 
-  // BLOCK NON-CLIENTS
-  if (userRole !== "client") {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center p-10 bg-white rounded-3xl shadow-xl">
-          <h1 className="text-4xl font-bold text-red-600 mb-4">
-            Access Denied
-          </h1>
-          <p className="text-xl text-slate-600 mb-6">
-            Only <strong>Clients</strong> can create new issues.
-          </p>
-          <button
-            onClick={() => navigate("/dashboard")}
-            className="bg-[#0EA5A4] text-white px-8 py-4 rounded-xl hover:bg-[#0d8c8b] transition"
-          >
-            Back to Dashboard
-          </button>
-        </div>
-      </div>
-    );
-  }
+  // Get current user from localStorage (or fallback)
+  const user = JSON.parse(localStorage.getItem("user_profile") || "{}");
+  const userName = user.first_name
+    ? `${user.first_name} ${user.last_name || ""}`.trim()
+    : "Client User";
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-    reset,
-  } = useForm({
-    resolver: yupResolver(schema),
-    defaultValues: { priority: "medium" },
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [priority, setPriority] = useState("medium");
+  const [attachments, setAttachments] = useState([]);
+
+  const createMutation = useMutation({
+    mutationFn: (payload) => mockIssues.create(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries(["issues"]);
+      toast.success("Issue created successfully!");
+      navigate("/issues");
+    },
+    onError: () => {
+      toast.error("Failed to create issue");
+    },
   });
-  const userProfile = JSON.parse(localStorage.getItem("user_profile") || "{}");
 
-  const onSubmit = async (data) => {
-    setIsSubmitting(true);
-    try {
-      // convert files to base64 (for mock)
-      const attachments = await Promise.all(
-        files.map(async (file) => {
-          if (!file) return null;
-          if (typeof file === "string" && file.startsWith("data:")) {
-            return {
-              id: Date.now() + Math.random(),
-              filename: file.name || "file",
-              url: file,
-            };
-          }
-          const reader = new FileReader();
-          const base64 = await new Promise((res, rej) => {
-            reader.onload = () => res(reader.result);
-            reader.onerror = (e) => rej(e);
-            reader.readAsDataURL(file);
-          });
-          return {
-            id: Date.now() + Math.random(),
-            filename: file.name,
-            url: base64,
-          };
-        })
-      );
+  const handleSubmit = () => {
+    if (!title.trim()) return toast.error("Title is required");
+    if (!description.trim()) return toast.error("Description is required");
 
-      const newIssuePayload = {
-        title: data.title,
-        description: data.description,
-        priority: data.priority,
-        status: "open",
-        created_by: userProfile.email || "client@cfitp.com",
-        created_by_name:
-          userProfile.first_name || userProfile.email || "Client",
-        attachments,
-      };
-
-      await mockIssues.create(newIssuePayload);
-
-      toast.success(
-        "Issue submitted successfully! Our team will review it shortly."
-      );
-      reset();
-      setFiles([]);
-      setTimeout(() => navigate("/issues"), 600);
-    } catch (err) {
-      console.error(err);
-      toast.error("Failed to submit issue. Please try again.");
-    } finally {
-      setIsSubmitting(false);
-    }
+    createMutation.mutate({
+      title,
+      description,
+      priority,
+      created_by: user.email || "client@example.com",
+      created_by_name: userName,
+      attachments: attachments.map((file) => ({
+        id: Date.now() + Math.random(),
+        filename: file.name,
+        size: file.size,
+        url: URL.createObjectURL(file),
+      })),
+    });
   };
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="max-w-5xl mx-auto p-6"
+      className="max-w-4xl mx-auto py-10 px-6"
     >
-      <button
-        onClick={() => navigate(-1)}
-        className="flex items-center gap-2 text-slate-600 hover:text-slate-800 mb-8 font-medium"
-      >
-        <ArrowLeft size={22} /> Back to Issues
-      </button>
+      {/* Header */}
+      <div className="flex items-center gap-4 mb-10">
+        <button
+          onClick={() => navigate(-1)}
+          className="flex items-center gap-2 text-slate-600 hover:text-[#0EA5A4] transition font-medium"
+        >
+          <ArrowLeft size={22} /> Back
+        </button>
+        <h1 className="text-4xl font-bold text-slate-800">Create New Issue</h1>
+      </div>
 
-      <h1 className="text-4xl font-bold text-slate-800 mb-10">
-        Report a New Issue
-      </h1>
-
-      <form
-        onSubmit={handleSubmit(onSubmit)}
-        className="bg-white rounded-3xl shadow-xl p-10 space-y-10"
-      >
+      {/* Form */}
+      <div className="bg-white rounded-3xl shadow-xl border border-gray-200 p-10 space-y-8">
+        {/* Title */}
         <div>
           <label className="block text-lg font-semibold text-slate-700 mb-3">
             Issue Title
           </label>
           <input
-            {...register("title")}
-            placeholder="e.g., Payment failed on checkout page"
-            className="w-full px-6 py-5 rounded-2xl border-2 border-gray-200 focus:border-[#0EA5A4] focus:ring-4 focus:ring-teal-100 outline-none text-lg transition"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="e.g. Login button not working"
+            className="w-full px-6 py-4 border-2 border-gray-200 rounded-2xl focus:border-[#0EA5A4] focus:ring-4 focus:ring-teal-100 text-lg transition"
           />
-          {errors.title && (
-            <p className="text-red-500 text-sm mt-2">{errors.title.message}</p>
-          )}
         </div>
 
+        {/* Description */}
         <div>
           <label className="block text-lg font-semibold text-slate-700 mb-3">
-            Describe the Problem
+            Description
           </label>
           <textarea
-            {...register("description")}
-            rows={10}
-            placeholder="Please include: steps to reproduce, device/browser used, expected vs actual behavior..."
-            className="w-full px-6 py-5 rounded-2xl border-2 border-gray-200 focus:border-[#0EA5A4] focus:ring-4 focus:ring-teal-100 outline-none resize-none text-lg transition"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows={8}
+            placeholder="Describe the problem in detail..."
+            className="w-full px-6 py-4 border-2 border-gray-200 rounded-2xl focus:border-[#0EA5A4] focus:ring-4 focus:ring-teal-100 resize-none text-lg transition"
           />
-          {errors.description && (
-            <p className="text-red-500 text-sm mt-2">
-              {errors.description.message}
-            </p>
-          )}
         </div>
 
+        {/* Priority */}
         <div>
           <label className="block text-lg font-semibold text-slate-700 mb-5">
             Priority Level
@@ -171,16 +109,21 @@ export default function NewIssuePage() {
             {["low", "medium", "high"].map((level) => (
               <label
                 key={level}
-                className="flex items-center gap-4 p-5 bg-gray-50 rounded-2xl cursor-pointer hover:bg-gray-100 transition border-2 border-transparent"
+                className={`flex items-center justify-center gap-4 p-6 rounded-2xl cursor-pointer transition-all border-2 ${
+                  priority === level
+                    ? "border-[#0EA5A4] bg-teal-50 shadow-lg"
+                    : "border-gray-200 bg-gray-50 hover:bg-gray-100"
+                }`}
               >
                 <input
                   type="radio"
+                  name="priority"
                   value={level}
-                  {...register("priority")}
-                  className="w-6 h-6 text-[#0EA5A4] focus:ring-[#0EA5A4]"
-                  defaultChecked={level === "medium"}
+                  checked={priority === level}
+                  onChange={(e) => setPriority(e.target.value)}
+                  className="w-6 h-6 text-[#0EA5A4]"
                 />
-                <span className="text-lg font-medium capitalize text-slate-700">
+                <span className="text-lg font-semibold capitalize">
                   {level}
                 </span>
               </label>
@@ -188,30 +131,19 @@ export default function NewIssuePage() {
           </div>
         </div>
 
-        <div>
-          <label className="block text-lg font-semibold text-slate-700 mb-4">
-            Attachments (Optional)
-          </label>
-          <FileUploader files={files} setFiles={setFiles} />
-        </div>
+       
 
-        <div className="flex gap-5 pt-8 border-t border-gray-200">
+        {/* Submit Button */}
+        <div className="pt-6 border-t border-gray-200">
           <button
-            type="submit"
-            disabled={isSubmitting}
-            className="bg-[#0EA5A4] hover:bg-[#0d8c8b] disabled:opacity-70 text-white px-12 py-5 rounded-2xl font-bold text-lg shadow-xl transition transform hover:scale-105 flex items-center gap-3"
+            onClick={handleSubmit}
+            disabled={createMutation.isPending}
+            className="w-full bg-[#0EA5A4] hover:bg-[#0d8c8b] disabled:opacity-70 text-white py-5 rounded-2xl text-xl font-bold transition shadow-xl"
           >
-            {isSubmitting ? "Submitting..." : "Submit Issue"}
-          </button>
-          <button
-            type="button"
-            onClick={() => navigate(-1)}
-            className="border-2 border-slate-300 text-slate-700 px-10 py-5 rounded-2xl font-bold text-lg hover:bg-gray-50 transition"
-          >
-            Cancel
+            {createMutation.isPending ? "Creating Issue..." : "Submit Issue"}
           </button>
         </div>
-      </form>
+      </div>
     </motion.div>
   );
 }

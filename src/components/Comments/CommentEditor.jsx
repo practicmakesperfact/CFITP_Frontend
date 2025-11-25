@@ -54,7 +54,7 @@ export default function CommentEditor({ issueId, onPosted }) {
         className="w-full p-5 border border-gray-300 rounded-2xl focus:ring-2 focus:ring-[#0EA5A4] focus:border-transparent resize-none"
         rows="4"
       />
-      <div className="mt-3">
+      {/* <div className="mt-3">
         <input
           type="file"
           onChange={(e) => setFiles(Array.from(e.target.files))}
@@ -69,7 +69,7 @@ export default function CommentEditor({ issueId, onPosted }) {
             ))}
           </div>
         )}
-      </div>
+      </div> */}
 
       <div className="mt-4 flex justify-between items-center gap-4">
         <div className="text-sm text-slate-500">
