@@ -8,14 +8,11 @@ import {
   User,
   AlertTriangle,
 } from "lucide-react";
-
 import { formatDistanceToNow, subDays, isWithinInterval } from "date-fns";
 import Lottie from "lottie-react";
 import emptyAnimation from "../../assets/illustrations/empty-state.json";
-
 import { issuesApi } from "../../api/issuesApi";
 import { useAuth } from "../../app/hooks";
-
 import KpiCard from "../../components/Dashboard/KpiCard";
 import ChartCard from "../../components/Dashboard/ChartCard";
 
@@ -23,51 +20,36 @@ export default function StaffDashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  // ===============================
-  // FETCH ALL ISSUES
-  // ===============================
-  const { data: issuesResponse, isLoading } = useQuery({
+  const { data: issuesData, isLoading } = useQuery({
     queryKey: ["issues"],
-    queryFn: issuesApi.list,
+    queryFn: issuesApi.list.then(res => res.data),
   });
 
-  const allIssues = issuesResponse?.data || [];
+  
+  const allIssues = Array.isArray(issuesData?.data) ? issuesData.data : [];
 
-  // ===============================
-  // FILTER: ONLY ISSUES ASSIGNED TO STAFF
-  // ===============================
+  
   const myIssues = allIssues.filter((i) => i.assignee_email === user?.email);
 
-  // ===============================
-  // KPIs
-  // ===============================
   const open = myIssues.filter((i) => i.status === "open").length;
   const inProgress = myIssues.filter((i) => i.status === "in-progress").length;
   const resolved = myIssues.filter((i) =>
     ["resolved", "closed"].includes(i.status)
   ).length;
 
-  // ===============================
-  // WEEKLY PERFORMANCE GRAPH
-  // ===============================
   const weeklyData = () => {
     const days = Array(7).fill(0);
-
     myIssues.forEach((issue) => {
       const created = new Date(issue.created_at);
       const day = created.getDay();
       days[day] += 1;
     });
-
     return {
       series: [{ data: days }],
       categories: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
     };
   };
 
-  // ===============================
-  // RECENT ACTIVITY (last 7 days)
-  // ===============================
   const recentActivity = myIssues
     .filter((i) =>
       isWithinInterval(new Date(i.created_at), {
@@ -84,10 +66,8 @@ export default function StaffDashboard() {
       animate={{ opacity: 1, y: 0 }}
       className="space-y-10"
     >
-      {/* HEADER */}
       <div className="flex items-center justify-between">
         <h1 className="text-4xl font-bold text-slate-800">Staff Dashboard</h1>
-
         <div className="flex items-center gap-3 bg-white border border-gray-200 shadow-sm px-6 py-3 rounded-xl">
           <User className="text-[#0EA5A4]" size={24} />
           <span className="font-medium text-slate-700">
@@ -96,7 +76,6 @@ export default function StaffDashboard() {
         </div>
       </div>
 
-      {/* KPI CARDS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <KpiCard
           title="Open Tasks"
@@ -124,7 +103,6 @@ export default function StaffDashboard() {
         />
       </div>
 
-      {/* CHARTS */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <ChartCard
           title="Your Issue Progress (This Week)"
@@ -141,10 +119,8 @@ export default function StaffDashboard() {
         />
       </div>
 
-      {/* MY ASSIGNED ISSUES */}
       <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-10">
         <h2 className="text-3xl font-bold text-slate-800 mb-6">My Tasks</h2>
-
         {isLoading ? (
           <p className="text-center text-slate-500 py-12">Loading...</p>
         ) : myIssues.length === 0 ? (
@@ -174,7 +150,6 @@ export default function StaffDashboard() {
                     })}
                   </p>
                 </div>
-
                 <span
                   className={`px-4 py-1.5 rounded-full text-sm font-semibold ${
                     issue.status === "open"
@@ -192,12 +167,10 @@ export default function StaffDashboard() {
         )}
       </div>
 
-      {/* RECENT ACTIVITY */}
       <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-10">
         <h2 className="text-3xl font-bold text-slate-800 mb-8">
           Recent Activity
         </h2>
-
         {recentActivity.length === 0 ? (
           <p className="text-center text-slate-500">No recent updates...</p>
         ) : (
@@ -221,7 +194,6 @@ export default function StaffDashboard() {
                       })}
                     </p>
                   </div>
-
                   <span
                     className={`px-4 py-1.5 rounded-full text-sm font-bold ${
                       i.status === "open"

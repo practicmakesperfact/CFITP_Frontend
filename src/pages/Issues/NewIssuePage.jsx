@@ -5,14 +5,12 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { ArrowLeft } from "lucide-react";
 import FileUploader from "../../components/UI/FileUploader.jsx";
-import mockIssues from "../../api/mockIssues.js";
+import { issuesApi } from "../../api/issuesApi.js";
 import toast from "react-hot-toast";
 
 export default function NewIssuePage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-
-  // Get current user from localStorage (or fallback)
   const user = JSON.parse(localStorage.getItem("user_profile") || "{}");
   const userName = user.first_name
     ? `${user.first_name} ${user.last_name || ""}`.trim()
@@ -21,17 +19,18 @@ export default function NewIssuePage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState("medium");
+  const [type, setType] = useState("bug"); 
   const [attachments, setAttachments] = useState([]);
 
   const createMutation = useMutation({
-    mutationFn: (payload) => mockIssues.create(payload),
+    mutationFn: (formData) => issuesApi.create(formData),
     onSuccess: () => {
       queryClient.invalidateQueries(["issues"]);
       toast.success("Issue created successfully!");
       navigate("/issues");
     },
-    onError: () => {
-      toast.error("Failed to create issue");
+    onError: (err) => {
+      toast.error(err.response?.data?.detail || "Failed to create issue");
     },
   });
 
@@ -39,19 +38,18 @@ export default function NewIssuePage() {
     if (!title.trim()) return toast.error("Title is required");
     if (!description.trim()) return toast.error("Description is required");
 
-    createMutation.mutate({
-      title,
-      description,
-      priority,
-      created_by: user.email || "client@example.com",
-      created_by_name: userName,
-      attachments: attachments.map((file) => ({
-        id: Date.now() + Math.random(),
-        filename: file.name,
-        size: file.size,
-        url: URL.createObjectURL(file),
-      })),
+    const formData = new FormData();
+    formData.append("title", title);
+    formData.append("description", description);
+    formData.append("priority", priority);
+    formData.append("type", type);
+    formData.append("created_by_name", userName);
+
+    attachments.forEach((file) => {
+      formData.append("attachments", file);
     });
+
+    createMutation.mutate(formData); 
   };
 
   return (
@@ -60,7 +58,6 @@ export default function NewIssuePage() {
       animate={{ opacity: 1, y: 0 }}
       className="max-w-4xl mx-auto py-10 px-6"
     >
-      {/* Header */}
       <div className="flex items-center gap-4 mb-10">
         <button
           onClick={() => navigate(-1)}
@@ -71,9 +68,7 @@ export default function NewIssuePage() {
         <h1 className="text-4xl font-bold text-slate-800">Create New Issue</h1>
       </div>
 
-      {/* Form */}
       <div className="bg-white rounded-3xl shadow-xl border border-gray-200 p-10 space-y-8">
-        {/* Title */}
         <div>
           <label className="block text-lg font-semibold text-slate-700 mb-3">
             Issue Title
@@ -86,7 +81,21 @@ export default function NewIssuePage() {
           />
         </div>
 
-        {/* Description */}
+        <div>
+          <label className="block text-lg font-semibold text-slate-700 mb-3">
+            Type
+          </label>
+          <select
+            value={type}
+            onChange={(e) => setType(e.target.value)}
+            className="w-full px-6 py-4 border-2 border-gray-200 rounded-2xl focus:border-[#0EA5A4]"
+          >
+            <option value="bug">Bug</option>
+            <option value="feature">Feature Request</option>
+            <option value="feedback">General Feedback</option>
+          </select>
+        </div>
+
         <div>
           <label className="block text-lg font-semibold text-slate-700 mb-3">
             Description
@@ -100,7 +109,6 @@ export default function NewIssuePage() {
           />
         </div>
 
-        {/* Priority */}
         <div>
           <label className="block text-lg font-semibold text-slate-700 mb-5">
             Priority Level
@@ -131,9 +139,8 @@ export default function NewIssuePage() {
           </div>
         </div>
 
-       
+        
 
-        {/* Submit Button */}
         <div className="pt-6 border-t border-gray-200">
           <button
             onClick={handleSubmit}

@@ -1,4 +1,3 @@
-// src/pages/Dashboards/ManagerDashboard.jsx
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
@@ -50,14 +49,13 @@ export default function ManagerDashboard() {
     localStorage.setItem("cfitp_feedback", JSON.stringify(updated));
     setFeedback(updated);
   };
-
-  const { data: issuesResponse, isLoading } = useQuery({
+  
+  const { data: issuesData, isLoading } = useQuery({
     queryKey: ["issues"],
-    queryFn: issuesApi.list,
+    queryFn: issuesApi.list.then(res => res.data),
   });
 
-  const issues = issuesResponse?.data || [];
-
+  const issues = Array.isArray(issuesData?.data) ? issuesData.data : [];
   const open = issues.filter((i) => i.status === "open").length;
   const inProgress = issues.filter((i) => i.status === "in-progress").length;
   const resolved = issues.filter((i) =>

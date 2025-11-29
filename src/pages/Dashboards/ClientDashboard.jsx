@@ -1,6 +1,6 @@
-// src/pages/Dashboard/ClientDashboard.jsx
+// src/pages/Dashboards/ClientDashboard.jsx
 import { useQuery } from "@tanstack/react-query";
-import mockIssues from "../../api/mockIssues.js";
+import { issuesApi } from "../../api/issuesApi";
 import { useNavigate } from "react-router-dom";
 import {
   format,
@@ -22,21 +22,20 @@ import { useState } from "react";
 
 export default function ClientDashboard() {
   const navigate = useNavigate();
-  const [timeFilter, setTimeFilter] = useState("today"); // today | week | month
+  const [timeFilter, setTimeFilter] = useState("today");
 
-  const { data, isLoading } = useQuery({
+  const { data: issuesData, isLoading } = useQuery({
     queryKey: ["issues"],
-    queryFn: mockIssues.list,
-    refetchInterval: 2000,
+    queryFn: () => issuesApi.list().then(res => res.data),
   });
 
-  const issues = data?.data || [];
+
+  const issues = Array.isArray(issuesData?.data) ? issuesData.data : [];
 
   const open = issues.filter((i) => i.status === "open").length;
   const inProgress = issues.filter((i) => i.status === "in-progress").length;
-  const closed = issues.filter((i) => i.status === "closed").length; // Changed from "resolved"
+  const closed = issues.filter((i) => i.status === "closed").length;
 
-  // PIE CHART — Status Overview
   const pieOptions = {
     series: [open, inProgress, closed],
     colors: ["#ef4444", "#f59e0b", "#10b981"],
@@ -63,7 +62,6 @@ export default function ClientDashboard() {
     },
   };
 
-  // LINE CHART — Issues This Week
   const weekDays = eachDayOfInterval({
     start: startOfWeek(new Date()),
     end: new Date(),
@@ -92,7 +90,6 @@ export default function ClientDashboard() {
     grid: { show: false },
   };
 
-  // RECENT ACTIVITY WITH FILTER
   const getFilteredIssues = () => {
     const now = new Date();
     return issues
@@ -113,7 +110,6 @@ export default function ClientDashboard() {
 
   return (
     <div className="space-y-10">
-      {/* Header */}
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-4xl font-bold text-slate-800">
@@ -131,7 +127,6 @@ export default function ClientDashboard() {
         </button>
       </div>
 
-      {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
         <div className="bg-white rounded-2xl shadow-lg p-6 border text-center">
           <AlertCircle size={40} className="mx-auto text-red-500 mb-3" />
@@ -155,7 +150,6 @@ export default function ClientDashboard() {
         </div>
       </div>
 
-      {/* Charts */}
       <div className="grid md:grid-cols-2 gap-8">
         <div className="bg-white rounded-3xl shadow-lg p-8 border">
           <h3 className="text-2xl font-bold text-slate-800 mb-6">
@@ -168,7 +162,6 @@ export default function ClientDashboard() {
             height={320}
           />
         </div>
-
         <div className="bg-white rounded-3xl shadow-lg p-8 border">
           <h3 className="text-2xl font-bold text-slate-800 mb-6">
             Issues This Week
@@ -182,11 +175,9 @@ export default function ClientDashboard() {
         </div>
       </div>
 
-      {/* RECENT ACTIVITY — WITH FILTER */}
       <div className="bg-white rounded-3xl shadow-lg border border-gray-200 p-10">
         <div className="flex items-center justify-between mb-8">
           <h2 className="text-3xl font-bold text-slate-800">Recent Activity</h2>
-
           <div className="relative">
             <select
               value={timeFilter}

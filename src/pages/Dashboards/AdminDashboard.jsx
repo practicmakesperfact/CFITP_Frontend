@@ -1,4 +1,4 @@
-// src/pages/Dashboards/AdminDashboard.jsx
+
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
@@ -23,7 +23,6 @@ import { formatDistanceToNow } from "date-fns";
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
-
   const [feedback, setFeedback] = useState([]);
 
   useEffect(() => {
@@ -36,12 +35,13 @@ export default function AdminDashboard() {
     return () => window.removeEventListener("storage", load);
   }, []);
 
-  const { data: issuesResponse, isLoading } = useQuery({
+  const { data: issuesData, isLoading } = useQuery({
     queryKey: ["issues"],
-    queryFn: issuesApi.list,
+    queryFn: issuesApi.list().then(res => res.data),
   });
 
-  const issues = issuesResponse?.data || [];
+ 
+  const issues = Array.isArray(issuesData?.data) ? issuesData.data : [];
 
   const openCount = issues.filter((i) => i.status === "open").length;
   const inProgressCount = issues.filter(
@@ -123,13 +123,11 @@ export default function AdminDashboard() {
         />
       </div>
 
-      {/* CLIENT FEEDBACK — VISIBLE ONLY TO ADMIN */}
       <div className="bg-white rounded-3xl shadow-xl border border-gray-200 p-10">
         <h2 className="text-3xl font-bold text-slate-800 mb-8 flex items-center gap-4">
           <MessageSquare className="text-[#0EA5A4]" size={32} />
           Client Feedback ({feedback.length})
         </h2>
-
         {feedback.length === 0 ? (
           <div className="text-center py-16">
             <Lottie animationData={emptyAnimation} className="w-64 mx-auto" />
@@ -163,7 +161,6 @@ export default function AdminDashboard() {
         )}
       </div>
 
-      {/* All Issues */}
       <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-10">
         <h2 className="text-3xl font-bold text-slate-800 mb-8">All Issues</h2>
         {issues.length === 0 ? (

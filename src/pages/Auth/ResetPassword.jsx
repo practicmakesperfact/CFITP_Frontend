@@ -3,6 +3,7 @@ import { useForm } from "react-hook-form";
 import { motion } from "framer-motion";
 import toast from "react-hot-toast";
 import { Loader2 } from "lucide-react";
+import { authApi } from "../../api/authApi.js";
 
 export default function ResetPassword() {
   const {
@@ -12,46 +13,43 @@ export default function ResetPassword() {
   } = useForm();
 
   const onSubmit = async (data) => {
-    await new Promise((r) => setTimeout(r, 1500));
-    toast.success("Password reset link sent to your email!");
+    try {
+      await authApi.resetPassword(data.email);
+      toast.success("Password reset link sent!");
+    } catch {
+      toast.error("Email not found");
+    }
   };
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
       className="min-h-screen flex items-center justify-center p-4"
     >
-      <div className="w-full max-w-md bg-white dark:bg-gray-900 rounded-2xl shadow-2xl p-8">
-        <h1 className="text-3xl font-bold text-primary text-center mb-8">
+      <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl p-10 border">
+        <h1 className="text-4xl font-bold text-center text-[#0EA5A4] mb-10">
           Reset Password
         </h1>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-          <div>
-            <label className="block text-sm font-medium text-text mb-2">
-              Email
-            </label>
-            <input
-              {...register("email", { required: "Required" })}
-              type="email"
-              placeholder="you@example.com"
-              className="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-text focus:ring-2 focus:ring-primary"
-            />
-            {errors.email && (
-              <p className="text-red-500 text-xs mt-1">
-                {errors.email.message}
-              </p>
-            )}
-          </div>
+          <input
+            {...register("email", { required: "Email required" })}
+            type="email"
+            placeholder="Enter your email"
+            className="w-full px-5 py-4 border rounded-xl focus:border-[#0EA5A4]"
+          />
+          {errors.email && (
+            <p className="text-red-500 text-sm">{errors.email.message}</p>
+          )}
 
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full bg-primary hover:bg-accent text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2"
+            className="w-full bg-[#0EA5A4] hover:bg-teal-700 text-white py-5 rounded-xl font-bold text-xl flex items-center justify-center gap-3"
           >
             {isSubmitting ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
+              <Loader2 className="animate-spin" />
             ) : (
               "Send Reset Link"
             )}

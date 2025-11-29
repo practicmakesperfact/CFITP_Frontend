@@ -1,15 +1,11 @@
-
 import { useForm } from "react-hook-form";
-import { useMutation } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Link, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
-import { authApi } from "../../api/authApi.js";
-import { Loader2, ChevronDown } from "lucide-react";
 import { useState } from "react";
 import { useUIStore } from "../../app/store/uiStore.js";
+import { authApi } from "../../api/authApi.js";
 
-// DEMO ACCOUNTS — HARDOCED FOR FRONTEND-ONLY LOGIN
 const DEMO_ACCOUNTS = {
   "admin@cfitp.com": { password: "admin123", role: "admin" },
   "manager@cfitp.com": { password: "manager123", role: "manager" },
@@ -20,157 +16,106 @@ const DEMO_ACCOUNTS = {
 export default function Login() {
   const { register, handleSubmit, setValue } = useForm();
   const navigate = useNavigate();
-  const [selectedRole, setSelectedRole] = useState("client");
-
-  const handleRoleChange = (role) => {
-    setSelectedRole(role);
-    const account = Object.entries(DEMO_ACCOUNTS).find(
-      ([_, v]) => v.role === role
-    );
-    if (account) {
-      const [email, info] = account;
-      setValue("email", email);
-      setValue("password", info.password);
-      toast.success(`Demo: ${email} / ${info.password}`, { duration: 5000 });
-    }
-  };
+  const setUserRole = useUIStore((state) => state.setUserRole);
 
   const onSubmit = async (data) => {
     const { email, password } = data;
 
-    // CHECK IF IT'S A DEMO ACCOUNT → BYPASS BACKEND
+    // DEMO MODE (optional – remove if you don’t want it)
     if (DEMO_ACCOUNTS[email]?.password === password) {
       const role = DEMO_ACCOUNTS[email].role;
-
-      // Fake tokens (mock values)
-      localStorage.setItem("access_token", `mock-access-${Date.now()}`);
-      localStorage.setItem("refresh_token", `mock-refresh-${Date.now()}`);
+      localStorage.setItem("access_token", `demo-${Date.now()}`);
+      localStorage.setItem("refresh_token", "demo");
       localStorage.setItem("user_role", role);
-      localStorage.setItem(
-        "user_profile",
-        JSON.stringify({
-          email,
-          first_name: role.charAt(0).toUpperCase() + role.slice(1),
-          role,
-        })
-      );
-
-      useUIStore.getState().setUserRole(role);
-      window.dispatchEvent(new Event("roleChanged"));
-
-      toast.success(`Welcome back, ${role.toUpperCase()}!`);
+      localStorage.setItem("user_profile", JSON.stringify({ email, role }));
+      setUserRole(role);
+      toast.success(`Demo Login: ${role.toUpperCase()}`);
       navigate("/dashboard", { replace: true });
       return;
     }
 
-    // ONLY IF NOT DEMO → TRY REAL BACKEND
+    // REAL LOGIN
     try {
-      const response = await authApi.login(data);
-      const { access, refresh } = response.data;
+      const res = await authApi.login({ email, password });
+      localStorage.setItem("access_token", res.data.access);
+      localStorage.setItem("refresh_token", res.data.refresh);
 
-      localStorage.setItem("access_token", access);
-      localStorage.setItem("refresh_token", refresh);
+      const userRes = await authApi.me();
+      const user = userRes.data;
+      localStorage.setItem("user_role", user.role);
+      localStorage.setItem("user_profile", JSON.stringify(user));
+      setUserRole(user.role);
 
-      let finalRole = selectedRole;
-      try {
-        const { data: user } = await authApi.me();
-        if (user?.role) finalRole = user.role;
-        localStorage.setItem("user_profile", JSON.stringify(user));
-      } catch (err) {}
-
-      localStorage.setItem("user_role", finalRole);
-      useUIStore.getState().setUserRole(finalRole);
-      window.dispatchEvent(new Event("roleChanged"));
-
-      toast.success(`Welcome back, ${finalRole.toUpperCase()}!`);
+      toast.success(`Welcome, ${user.role.toUpperCase()}!`);
       navigate("/dashboard", { replace: true });
-    } catch (error) {
-      toast.error("Invalid credentials");
+    } catch (err) {
+      toast.error("Invalid email or password");
     }
   };
 
   return (
     <motion.div
-       initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/10 via-background to-accent/10 p-4" 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="min-h-screen flex items-center justify-center bg-gradient-to-br from-teal-50 to-orange-50 p-4"
     >
-      <div className="w-full max-w-md bg-slate-900/95 backdrop-blur-2xl rounded-3xl shadow-2xl p-10 border border-slate-800">
-        <h1 className="text-5xl font-bold text-cyan-400 text-center mb-10">
+      <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl p-10">
+        <h1 className="text-5xl font-bold text-center text-teal-600 mb-10">
           CFITP Login
         </h1>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-7">
-          <div>
-            <label className="block text-sm font-semibold text-white mb-2">
-              Email
-            </label>
-            <input
-              {...register("email", { required: true })}
-              type="email"
-              className="w-full px-5 py-4 bg-slate-800/60 border border-slate-700 rounded-xl text-white placeholder-gray-400 focus:outline-none transition"
-              placeholder="admin@cfitp.com"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold text-white mb-2">
-              Password
-            </label>
-            <input
-              {...register("password", { required: true })}
-              type="password"
-              className="w-full px-5 py-4 bg-slate-800/60 border border-slate-700 rounded-xl text-white placeholder-gray-400 focus:outline-none transition"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-cyan-300 mb-2">
-              Login as (Dev Mode)
-            </label>
-            <div className="relative">
-              <select
-                value={selectedRole}
-                onChange={(e) => handleRoleChange(e.target.value)}
-                className="w-full px-5 py-4 bg-slate-800/60 border border-slate-700 rounded-xl text-white appearance-none cursor-pointer pr-12 transition"
-              >
-                <option value="client">Client</option>
-                <option value="staff">Staff</option>
-                <option value="manager">Manager</option>
-                <option value="admin">Admin</option>
-              </select>
-              <ChevronDown className="absolute right-4 top-5 w-5 h-5 text-gray-400 pointer-events-none" />
-            </div>
-          </div>
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+          <input
+            {...register("email", { required: true })}
+            type="email"
+            placeholder="Email"
+            className="w-full px-5 py-4 border rounded-xl focus:border-teal-600 outline-none"
+          />
+          <input
+            {...register("password", { required: true })}
+            type="password"
+            placeholder="Password"
+            className="w-full px-5 py-4 border rounded-xl focus:border-teal-600 outline-none"
+          />
 
           <button
             type="submit"
-            className="w-full bg-cyan-500 hover:bg-cyan-400 text-white font-bold py-4 rounded-xl transition-all hover:scale-105 shadow-xl flex items-center justify-center gap-3"
+            className="w-full bg-teal-600 hover:bg-teal-700 text-white py-5 rounded-xl font-bold text-xl transition"
           >
             Login
           </button>
         </form>
 
-        <div className="mt-8 p-5 bg-slate-800/50 rounded-xl border border-slate-700">
-          <p className="text-cyan-300 font-semibold mb-3">
-            Demo Accounts (Auto-filled)
-          </p>
-          <div className="text-xs space-y-1 text-gray-300">
-            <div>admin@cfitp.com → admin123</div>
-            <div>manager@cfitp.com → manager123</div>
-            <div>staff@cfitp.com → staff123</div>
-            <div>client@cfitp.com → client123</div>
+        <div className="mt-8 text-center">
+          <p className="text-sm text-gray-600 mb-4">Try instantly:</p>
+          <div className="grid grid-cols-2 gap-3">
+            {["Client", "Staff", "Manager", "Admin"].map((role) => (
+              <button
+                key={role}
+                type="button"
+                onClick={() => {
+                  const email = `${role.toLowerCase()}@cfitp.com`;
+                  setValue("email", email);
+                  setValue("password", `${role.toLowerCase()}123`);
+                  toast.success(`${role} demo loaded`);
+                }}
+                className="px-4 py-3 bg-gray-100 hover:bg-teal-100 border border-teal-300 rounded-xl text-sm font-medium transition"
+              >
+                {role}
+              </button>
+            ))}
           </div>
         </div>
 
-        <div className="mt-6 text-center">
+        <p className="text-center mt-8">
+          No account?{" "}
           <Link
             to="/register"
-            className="text-cyan-400 hover:text-cyan-300 text-sm"
+            className="text-teal-600 font-bold hover:underline"
           >
-            No account? Register (clients only)
+            Register
           </Link>
-        </div>
+        </p>
       </div>
     </motion.div>
   );

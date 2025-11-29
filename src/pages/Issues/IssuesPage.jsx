@@ -3,19 +3,19 @@ import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Plus } from "lucide-react";
 import { useUIStore } from "../../app/store/uiStore.js";
-import mockIssues from "../../api/mockIssues.js";
+import { issuesApi } from "../../api/issuesApi.js";
 import IssueCard from "../../components/Issues/IssueCard.jsx";
 
 export default function IssuesPage() {
   const { userRole } = useUIStore();
   const navigate = useNavigate();
 
-  const { data, isLoading } = useQuery({
+  const { data:issuesData, isLoading } = useQuery({
     queryKey: ["issues"],
-    queryFn: () => mockIssues.list(),
+    queryFn: () => issuesApi.list().then(res =>res.data),
   });
 
-  const issues = data?.data || [];
+  const issues = issuesData?.data || [];
 
   // ROLE FILTERING
   const user = JSON.parse(localStorage.getItem("user_profile") || "{}");
