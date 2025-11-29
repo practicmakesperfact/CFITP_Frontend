@@ -1,4 +1,4 @@
-// src/pages/Dashboards/ClientDashboard.jsx
+
 import { useQuery } from "@tanstack/react-query";
 import { issuesApi } from "../../api/issuesApi";
 import { useNavigate } from "react-router-dom";
@@ -24,14 +24,15 @@ export default function ClientDashboard() {
   const navigate = useNavigate();
   const [timeFilter, setTimeFilter] = useState("today");
 
-  const { data: issuesData, isLoading } = useQuery({
-    queryKey: ["issues"],
-    queryFn: () => issuesApi.list().then(res => res.data),
-  });
+ 
+ const { data: issuesData, isLoading } = useQuery({
+   queryKey: ["issues-all"],
+   queryFn: () => issuesApi.listAll(),
+ });
 
+ const issues = issuesData?.results || [];
 
-  const issues = Array.isArray(issuesData?.data) ? issuesData.data : [];
-
+ 
   const open = issues.filter((i) => i.status === "open").length;
   const inProgress = issues.filter((i) => i.status === "in-progress").length;
   const closed = issues.filter((i) => i.status === "closed").length;

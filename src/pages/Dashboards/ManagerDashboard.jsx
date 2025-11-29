@@ -50,12 +50,14 @@ export default function ManagerDashboard() {
     setFeedback(updated);
   };
   
-  const { data: issuesData, isLoading } = useQuery({
-    queryKey: ["issues"],
-    queryFn: issuesApi.list.then(res => res.data),
-  });
+const { data: issuesData, isLoading } = useQuery({
+  queryKey: ["issues"],
+  queryFn: () => issuesApi.list(),
+});
 
-  const issues = Array.isArray(issuesData?.data) ? issuesData.data : [];
+// Extract issues from paginated response
+const issues = issuesData?.results || [];
+
   const open = issues.filter((i) => i.status === "open").length;
   const inProgress = issues.filter((i) => i.status === "in-progress").length;
   const resolved = issues.filter((i) =>

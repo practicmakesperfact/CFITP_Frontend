@@ -41,7 +41,7 @@ export default function AdminDashboard() {
   });
 
  
-  const issues = Array.isArray(issuesData?.data) ? issuesData.data : [];
+  const issues = Array.isArray(issuesData?.results) ? issuesData.results : [];
 
   const openCount = issues.filter((i) => i.status === "open").length;
   const inProgressCount = issues.filter(

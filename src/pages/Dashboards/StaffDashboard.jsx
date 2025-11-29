@@ -22,11 +22,13 @@ export default function StaffDashboard() {
 
   const { data: issuesData, isLoading } = useQuery({
     queryKey: ["issues"],
-    queryFn: issuesApi.list.then(res => res.data),
+    queryFn: () => issuesApi.list.then(res => res.data),
   });
 
   
-  const allIssues = Array.isArray(issuesData?.data) ? issuesData.data : [];
+  const allIssues = Array.isArray(issuesData?.results)
+    ? issuesData.results
+    : [];
 
   
   const myIssues = allIssues.filter((i) => i.assignee_email === user?.email);

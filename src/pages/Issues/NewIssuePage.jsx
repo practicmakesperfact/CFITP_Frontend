@@ -25,7 +25,8 @@ export default function NewIssuePage() {
   const createMutation = useMutation({
     mutationFn: (formData) => issuesApi.create(formData),
     onSuccess: () => {
-      queryClient.invalidateQueries(["issues"]);
+      queryClient.invalidateQueries({ queryKey: ["issues"] });
+      queryClient.resetQueries({ queryKey: ["issues"] }); // ← THIS FORCES FRESH DATA
       toast.success("Issue created successfully!");
       navigate("/issues");
     },
@@ -83,14 +84,14 @@ export default function NewIssuePage() {
 
         <div>
           <label className="block text-lg font-semibold text-slate-700 mb-3">
-            Type
+            Issue Type
           </label>
           <select
             value={type}
             onChange={(e) => setType(e.target.value)}
-            className="w-full px-6 py-4 border-2 border-gray-200 rounded-2xl focus:border-[#0EA5A4]"
+            className="w-full px-6 py-4 border-2 border-gray-200 rounded-2xl focus:border-[#0EA5A4] text-lg"
           >
-            <option value="bug">Bug</option>
+            <option value="bug">Bug Report</option>
             <option value="feature">Feature Request</option>
             <option value="feedback">General Feedback</option>
           </select>
@@ -138,8 +139,6 @@ export default function NewIssuePage() {
             ))}
           </div>
         </div>
-
-        
 
         <div className="pt-6 border-t border-gray-200">
           <button
