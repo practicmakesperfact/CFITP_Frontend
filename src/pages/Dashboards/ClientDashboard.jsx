@@ -19,20 +19,25 @@ import {
 } from "lucide-react";
 import Chart from "react-apexcharts";
 import { useState } from "react";
+import { motion } from "framer-motion";
+import Lottie from "lottie-react";
+import emptyAnimation from "../../assets/illustrations/empty-state.json";
 
 export default function ClientDashboard() {
   const navigate = useNavigate();
   const [timeFilter, setTimeFilter] = useState("today");
 
- 
- const { data: issuesData, isLoading } = useQuery({
-   queryKey: ["issues-all"],
-   queryFn: () => issuesApi.listAll(),
- });
+  const { data: issuesData, isLoading } = useQuery({
+    queryKey: ["issues-all"],
+    queryFn: () => issuesApi.listAll(),
+  });
 
- const issues = issuesData?.results || [];
+  const allIssues = issuesData?.results || [];
+  const user = JSON.parse(localStorage.getItem("user_profile") || "{}");
 
- 
+  // Filter issues for this client only
+  const issues = allIssues.filter((i) => i.reporter_email === user.email);
+
   const open = issues.filter((i) => i.status === "open").length;
   const inProgress = issues.filter((i) => i.status === "in-progress").length;
   const closed = issues.filter((i) => i.status === "closed").length;
@@ -67,6 +72,7 @@ export default function ClientDashboard() {
     start: startOfWeek(new Date()),
     end: new Date(),
   });
+
   const dailyCounts = weekDays.map(
     (day) =>
       issues.filter(
@@ -110,11 +116,15 @@ export default function ClientDashboard() {
   const recentIssues = getFilteredIssues();
 
   return (
-    <div className="space-y-10">
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="space-y-10 pb-10"
+    >
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-4xl font-bold text-slate-800">
-            Welcome back, Client!
+            Welcome back, {user?.first_name || "Client"}!
           </h1>
           <p className="text-xl text-slate-600 mt-2">
             Here's what's happening with your issues
@@ -122,7 +132,7 @@ export default function ClientDashboard() {
         </div>
         <button
           onClick={() => navigate("/issues/new")}
-          className="bg-[#0EA5A4] hover:bg-teal-700 text-white px-8 py-4 rounded-2xl font-bold flex items-center gap-3 shadow-lg"
+          className="bg-[#0EA5A4] hover:bg-teal-700 text-white px-8 py-4 rounded-2xl font-bold flex items-center gap-3 shadow-lg transition-all hover:scale-105"
         >
           <Plus size={28} /> New Issue
         </button>
@@ -146,8 +156,8 @@ export default function ClientDashboard() {
         </div>
         <div className="bg-white rounded-2xl shadow-lg p-6 border text-center">
           <Clock size={40} className="mx-auto text-blue-500 mb-3" />
-          <p className="text-4xl font-bold text-blue-600">2.3h</p>
-          <p className="text-slate-600">Avg. Response Time</p>
+          <p className="text-4xl font-bold text-blue-600">{issues.length}</p>
+          <p className="text-slate-600">Total Issues</p>
         </div>
       </div>
 
@@ -176,7 +186,7 @@ export default function ClientDashboard() {
         </div>
       </div>
 
-      <div className="bg-white rounded-3xl shadow-lg border border-gray-200 p-10">
+      <div className="bg-white rounded-3xl shadow-lg border border-gray-200 p-8">
         <div className="flex items-center justify-between mb-8">
           <h2 className="text-3xl font-bold text-slate-800">Recent Activity</h2>
           <div className="relative">
@@ -197,18 +207,21 @@ export default function ClientDashboard() {
         </div>
 
         {recentIssues.length === 0 ? (
-          <p className="text-center py-16 text-slate-500 text-xl">
-            No activity in this period
-          </p>
+          <div className="text-center py-16">
+            <Lottie animationData={emptyAnimation} className="w-64 mx-auto" />
+            <p className="text-slate-500 text-xl mt-4">
+              No activity in this period
+            </p>
+          </div>
         ) : (
-          <div className="space-y-6">
+          <div className="space-y-6 max-h-96 overflow-y-auto pr-4">
             {recentIssues.map((issue) => (
               <div
                 key={issue.id}
                 onClick={() => navigate(`/issues/${issue.id}`)}
-                className="flex items-center justify-between p-6 bg-gradient-to-r from-gray-50 to-gray-100 rounded-2xl hover:from-gray-100 hover:to-gray-200 transition-all cursor-pointer border border-gray-200 shadow-md"
+                className="flex items-center justify-between p-6 bg-gradient-to-r from-gray-50 to-gray-100 rounded-2xl hover:from-gray-100 hover:to-gray-200 transition-all cursor-pointer border border-gray-200 shadow-md hover:shadow-lg"
               >
-                <div>
+                <div className="flex-1">
                   <p className="text-xl font-semibold text-slate-800">
                     {issue.title}
                   </p>
@@ -236,7 +249,17 @@ export default function ClientDashboard() {
             ))}
           </div>
         )}
+
+        {/* Scroll indicator */}
+        {recentIssues.length > 4 && (
+          <div className="text-center mt-6 pt-4 border-t border-gray-200">
+            <p className="text-slate-500 text-sm flex items-center justify-center gap-2">
+              <ChevronDown size={16} />
+              Scroll to see more activities
+            </p>
+          </div>
+        )}
       </div>
-    </div>
+    </motion.div>
   );
 }

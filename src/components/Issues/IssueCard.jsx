@@ -31,12 +31,12 @@ export default function IssueCard({ issue }) {
       onClick={() => navigate(`/issues/${issue.id}`)}
       className="cursor-pointer p-6 bg-white rounded-2xl shadow-md border border-gray-200 hover:shadow-xl transition"
     >
-      {/* TITLE + ID */}
+      {/* TITLE*/}
       <div className="flex items-start justify-between mb-4">
         <h2 className="text-xl font-semibold text-slate-800 line-clamp-2">
           {issue.title}
         </h2>
-        <span className="text-sm text-slate-500">#{issue.id}</span>
+        
       </div>
 
       {/* STATUS + PRIORITY */}

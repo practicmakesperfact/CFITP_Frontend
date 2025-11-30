@@ -1,15 +1,14 @@
+
 import axiosClient from "./axiosClient";
 
 export const issuesApi = {
+  // For paginated lists (IssuesPage)
   list: async (params = {}) => {
     const response = await axiosClient.get("/issues/", { params });
-    console.log("Raw API response:", response);
-
-    // Return the full paginated response
     return response.data;
   },
 
- //method to fetch all pages (optional but recommended)
+  // For dashboards that need ALL data
   listAll: async () => {
     let allResults = [];
     let nextUrl = "/issues/";
@@ -17,7 +16,6 @@ export const issuesApi = {
     while (nextUrl) {
       const response = await axiosClient.get(nextUrl);
       const data = response.data;
-
       allResults = [...allResults, ...data.results];
       nextUrl = data.next;
     }
@@ -28,6 +26,7 @@ export const issuesApi = {
   retrieve: (id) => axiosClient.get(`/issues/${id}/`),
   create: (data) => axiosClient.post("/issues/", data),
   update: (id, data) => axiosClient.patch(`/issues/${id}/`, data),
+  delete: (id) => axiosClient.delete(`/issues/${id}/`),
   assign: (id, data) => axiosClient.post(`/issues/${id}/assign/`, data),
   transition: (id, status) =>
     axiosClient.post(`/issues/${id}/transition/`, { status }),
