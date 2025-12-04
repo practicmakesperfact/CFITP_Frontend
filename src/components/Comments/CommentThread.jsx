@@ -1,60 +1,57 @@
 
-import { format } from "date-fns";
+import { User, Lock } from "lucide-react";
+import DOMPurify from "dompurify";
 
-export default function CommentThread({ comments = [] }) {
-  if (comments.length === 0) {
-    return (
-      <div className="text-center py-12 text-slate-500">
-        No comments yet. Be the first to reply!
-      </div>
-    );
+export default function CommentThread({ comment, userRole }) {
+  const isInternal = comment.visibility === "internal";
+  const canViewInternal = ["manager", "admin", "staff"].includes(userRole);
+
+  // Don't show internal comments to clients
+  if (isInternal && !canViewInternal) {
+    return null;
   }
 
+  const sanitizedContent = DOMPurify.sanitize(comment.content);
+
   return (
-    <div className="space-y-8">
-      {comments.map((comment) => (
-        <div key={comment.id} className="flex gap-4">
-          <div className="w-10 h-10 bg-[#0EA5A4] rounded-full flex items-center justify-center text-white font-bold text-lg flex-shrink-0">
-            {String(comment.author || "U")[0].toUpperCase()}
+    <div
+      className={`flex gap-3 p-4 rounded-lg ${
+        isInternal ? "bg-yellow-50 border-l-4 border-yellow-400" : "bg-gray-50"
+      }`}
+    >
+      <div className="w-10 h-10 bg-teal-500 rounded-full flex items-center justify-center text-white font-bold flex-shrink-0">
+        {comment.author_name
+          ?.split(" ")
+          .map((n) => n[0])
+          .join("")
+          .toUpperCase()
+          .slice(0, 2) || "U"}
+      </div>
+
+      <div className="flex-1">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <span className="font-medium text-gray-900">
+              {comment.author_name || comment.author_email}
+            </span>
+
+            {isInternal && (
+              <span className="flex items-center gap-1 text-xs text-yellow-700 bg-yellow-100 px-2 py-1 rounded">
+                <Lock size={10} /> Internal Note
+              </span>
+            )}
           </div>
 
-          <div className="flex-1">
-            <div className="bg-gray-50 rounded-2xl px-6 py-4 border border-gray-200">
-              <div className="flex items-center gap-3 mb-2">
-                <span className="font-medium text-slate-800">
-                  {comment.author}
-                </span>
-                <span className="text-sm text-slate-500">
-                  {format(
-                    new Date(comment.created_at),
-                    "MMM d, yyyy 'at' h:mm a"
-                  )}
-                </span>
-              </div>
-              <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">
-                {comment.content}
-              </p>
-
-              {/* attachments */}
-              {comment.attachments && comment.attachments.length > 0 && (
-                <div className="mt-3 grid grid-cols-3 gap-2">
-                  {comment.attachments.map((att, i) => (
-                    <a
-                      key={i}
-                      href={att.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-sm p-2 bg-white border rounded-md block"
-                    >
-                      {att.filename || `file-${i + 1}`}
-                    </a>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
+          <span className="text-sm text-gray-500">
+            {new Date(comment.created_at).toLocaleDateString()}
+          </span>
         </div>
-      ))}
+
+        <div
+          className="prose prose-gray max-w-none text-gray-700"
+          dangerouslySetInnerHTML={{ __html: sanitizedContent }}
+        />
+      </div>
     </div>
   );
 }

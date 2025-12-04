@@ -103,7 +103,7 @@ export default function AssignModal({ issue, staffUsers, onClose, onAssign }) {
                         <p className="font-semibold text-slate-800">
                           {staff.first_name && staff.last_name
                             ? `${staff.first_name} ${staff.last_name}`
-                            : staff.email}
+                            : staff.email || staff.username || "Unknown Staff"}
                         </p>
                         <p className="text-sm text-slate-500 flex items-center gap-1">
                           <Mail size={14} />

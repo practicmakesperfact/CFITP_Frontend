@@ -85,27 +85,17 @@ export default function Login() {
             Login
           </button>
         </form>
-
-        <div className="mt-8 text-center">
-          <p className="text-sm text-gray-600 mb-4">Try instantly:</p>
-          <div className="grid grid-cols-2 gap-3">
-            {["Client", "Staff", "Manager", "Admin"].map((role) => (
-              <button
-                key={role}
-                type="button"
-                onClick={() => {
-                  const email = `${role.toLowerCase()}@cfitp.com`;
-                  setValue("email", email);
-                  setValue("password", `${role.toLowerCase()}123`);
-                  toast.success(`${role} demo loaded`);
-                }}
-                className="px-4 py-3 bg-gray-100 hover:bg-teal-100 border border-teal-300 rounded-xl text-sm font-medium transition"
-              >
-                {role}
-              </button>
-            ))}
-          </div>
-        </div>
+        <select
+          {...register("role", { required: "Please select your role" })}
+          className="w-full px-5 py-4 mt-6 border rounded-xl focus:border-teal-500 outline-none"
+        >
+         
+          <option value="client">Client (Customer)</option>
+          <option value="staff">Staff</option>
+          <option value="manager">Manager</option>
+          <option value="admin">Admin</option>
+        </select>
+      
 
         <p className="text-center mt-8">
           No account?{" "}

@@ -25,7 +25,7 @@ import emptyAnimation from "../../assets/illustrations/empty-state.json";
 
 export default function ClientDashboard() {
   const navigate = useNavigate();
-  const [timeFilter, setTimeFilter] = useState("today");
+  const [timeFilter, setTimeFilter] = useState("month");
 
   const { data: issuesData, isLoading } = useQuery({
     queryKey: ["issues-all"],

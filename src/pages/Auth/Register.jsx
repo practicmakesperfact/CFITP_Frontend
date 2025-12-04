@@ -73,20 +73,7 @@ export default function Register() {
             className="w-full px-5 py-4 border rounded-xl focus:border-teal-600 outline-none"
           />
 
-          {/* THIS IS THE ONLY NEW THING */}
-          <select
-            {...register("role", { required: "Please select your role" })}
-            className="w-full px-5 py-4 border rounded-xl focus:border-teal-600 outline-none"
-          >
-            <option value="">Choose your role</option>
-            <option value="client">Client (Customer)</option>
-            <option value="staff">Staff</option>
-            <option value="manager">Manager</option>
-            <option value="admin">Admin</option>
-          </select>
-          {errors.role && (
-            <p className="text-red-500 text-sm">{errors.role.message}</p>
-          )}
+        
 
           <button
             type="submit"
