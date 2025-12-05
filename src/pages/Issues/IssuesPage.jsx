@@ -3,35 +3,52 @@ import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Plus, ChevronLeft, ChevronRight } from "lucide-react";
 import { useUIStore } from "../../app/store/uiStore.js";
+import { useAuth } from "../../app/hooks.js";
 import { issuesApi } from "../../api/issuesApi.js";
 import IssueCard from "../../components/Issues/IssueCard.jsx";
 import { useState } from "react";
 
 export default function IssuesPage() {
   const { userRole } = useUIStore();
+  const { user: currentUser, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
+
+  // Get user from localStorage as fallback
+  const getLocalUser = () => {
+    try {
+      const userStr = localStorage.getItem("user_profile");
+      return userStr ? JSON.parse(userStr) : null;
+    } catch (e) {
+      return null;
+    }
+  };
+
+  const user = currentUser || getLocalUser();
+  const userEmail = user?.email || "";
 
   const {
     data: issuesData,
     isLoading,
     error,
   } = useQuery({
-    queryKey: ["issues", page],
+    queryKey: ["issues", page, userEmail],
     queryFn: () => issuesApi.list({ page }),
+    enabled: !authLoading, // Wait for auth to load
   });
 
   console.log("Issues data:", issuesData);
+  console.log("Current user email:", userEmail);
+  console.log("User role:", userRole);
 
   const issues = issuesData?.results || [];
-  const user = JSON.parse(localStorage.getItem("user_profile") || "{}");
 
   const filteredIssues = (() => {
     if (userRole === "client") {
-      return issues.filter((i) => i.reporter_email === user.email);
+      return issues.filter((i) => i.reporter_email === userEmail);
     }
     if (userRole === "staff") {
-      return issues.filter((i) => i.assignee_email === user.email);
+      return issues.filter((i) => i.assignee_email === userEmail);
     }
     return issues;
   })();
@@ -43,6 +60,14 @@ export default function IssuesPage() {
   const handlePrevPage = () => {
     if (issuesData?.previous) setPage(page - 1);
   };
+
+  if (authLoading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-teal-500"></div>
+      </div>
+    );
+  }
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>

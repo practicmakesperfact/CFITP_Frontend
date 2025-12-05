@@ -13,12 +13,14 @@ import {
   Lock,
   Paperclip,
   Download,
-  X,
+  Globe,
+  Tag,
 } from "lucide-react";
 
 import { issuesApi } from "../../api/issuesApi.js";
 import { commentsApi } from "../../api/commentsApi.js";
-import { notificationsApi } from "../../api/notificationsApi.js";
+import { attachmentsApi } from "../../api/attachmentsApi.js";
+import axiosClient from "../../api/axiosClient.js";
 
 import CommentThread from "../../components/Comments/CommentThread.jsx";
 import CommentEditor from "../../components/Comments/CommentEditor.jsx";
@@ -42,86 +44,124 @@ export default function IssueDetailPage() {
   const [commentVisibility, setCommentVisibility] = useState("public");
 
   const { userRole } = useUIStore();
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, isLoading: authLoading } = useAuth();
 
-  // Debug logging
-  useEffect(() => {
-    console.log("Current user role:", userRole);
-    console.log("Current user:", currentUser);
-  }, [userRole, currentUser]);
+  // Get user from localStorage as fallback
+  const getLocalUser = () => {
+    try {
+      const userStr = localStorage.getItem("user_profile");
+      return userStr ? JSON.parse(userStr) : null;
+    } catch (e) {
+      return null;
+    }
+  };
 
-  // Fetch staff users for assignment (managers only)
-  const { data: staffUsers = [] } = useQuery({
-    queryKey: ["staff-users"],
-    queryFn: async () => {
-      try {
-        const response = await issuesApi.listAll();
-        const users = response.results || [];
-        return users.filter((u) => u.role === "staff");
-      } catch (error) {
-        console.error("Error fetching staff users:", error);
-        return [];
-      }
-    },
-    enabled: userRole === "manager",
-  });
+  const user = currentUser || getLocalUser();
 
   // Fetch issue details
   const {
     data: issueRes,
-    isLoading,
-    error,
+    isLoading: issueLoading,
+    error: issueError,
   } = useQuery({
     queryKey: ["issues", id],
     queryFn: () => issuesApi.retrieve(id).then((res) => res.data),
-    onSuccess: (data) => {
-      console.log("Issue data loaded:", data);
-      console.log("created_by type:", typeof data.created_by);
-      console.log("assignee type:", typeof data.assignee);
-    },
     onError: (err) => {
       console.error("Error loading issue:", err);
+      toast.error("Failed to load issue details");
     },
+    enabled: !!id && !authLoading, // Wait for auth to load
   });
 
   // Fetch comments
-  const { data: comments = [] } = useQuery({
+  const {
+    data: comments = [],
+    isLoading: commentsLoading,
+    error: commentsError,
+  } = useQuery({
     queryKey: ["comments", id],
-    queryFn: () => commentsApi.list(id).then((res) => res.data),
+    queryFn: () =>
+      commentsApi.list(id).then((res) => {
+        if (Array.isArray(res.data)) {
+          return res.data;
+        } else if (res.data?.results) {
+          return res.data.results;
+        }
+        return [];
+      }),
+    onError: (err) => {
+      console.error("Error loading comments:", err);
+      if (err.response?.status !== 404) {
+        toast.error("Failed to load comments");
+      }
+    },
+    enabled: !!id, // Only fetch if we have an issue ID
   });
 
-  // Helper functions - FIXED VERSION
-  const getUserInitials = (name) => {
-    // Check if name exists and is actually a string
-    if (!name || typeof name !== "string") return "U";
+  // Sort comments by created_at DESC (newest first)
+  const sortedComments = [...comments].sort(
+    (a, b) => new Date(b.created_at) - new Date(a.created_at)
+  );
 
-    // Remove extra spaces and check if string is empty
+  // Fetch attachments
+  const {
+    data: attachments = [],
+    isLoading: attachmentsLoading,
+    error: attachmentsError,
+  } = useQuery({
+    queryKey: ["attachments", id],
+    queryFn: () =>
+      attachmentsApi.list(id).then((res) => {
+        if (Array.isArray(res.data)) {
+          return res.data;
+        } else if (res.data?.results) {
+          return res.data.results;
+        }
+        return [];
+      }),
+    onError: (err) => {
+      console.error("Error loading attachments:", err);
+      // Don't show toast for 404, it's expected
+    },
+    enabled: !!id,
+  });
+
+  // Get attachments from issue data as fallback
+  const issueAttachments = issueRes?.attachments || [];
+  const allAttachments =
+    attachments.length > 0 ? attachments : issueAttachments;
+
+  // Fetch staff users for assignment
+  const { data: staffUsers = [] } = useQuery({
+    queryKey: ["staff-users"],
+    queryFn: async () => {
+      try {
+        const response = await axiosClient.get("/users/");
+        const users = response.data.results || response.data || [];
+        return users.filter((u) => u.role === "staff" || u.role === "manager");
+      } catch (error) {
+        console.error("Error fetching users:", error);
+        return [];
+      }
+    },
+    enabled: userRole === "manager", // Only fetch for managers
+  });
+
+  // Helper functions
+  const getUserInitials = (name) => {
+    if (!name || typeof name !== "string") return "U";
     const trimmedName = name.trim();
     if (trimmedName === "") return "U";
-
-    // Now safely split the string
     const nameParts = trimmedName.split(" ").filter((part) => part.length > 0);
-
-    // If no valid parts, return 'U'
     if (nameParts.length === 0) return "U";
-
-    // Get first letter of each part
     const initials = nameParts.map((part) => part[0].toUpperCase()).join("");
-
-    // Return first 2 letters or just 1 if only one name
     return initials.slice(0, 2);
   };
 
-  // FIXED: Safe way to get display name from user object or string
   const getDisplayName = (userData) => {
     if (!userData) return "Unknown";
-
-    // If it's already a string (email or name)
     if (typeof userData === "string") return userData;
-
-    // If it's an object with properties
     if (typeof userData === "object") {
-      // Check for various possible name fields
       if (userData.name) return userData.name;
       if (userData.first_name && userData.last_name) {
         return `${userData.first_name} ${userData.last_name}`;
@@ -129,22 +169,15 @@ export default function IssueDetailPage() {
       if (userData.email) return userData.email;
       if (userData.username) return userData.username;
     }
-
     return "Unknown";
   };
 
-  // FIXED: Safe way to get email from user object or string
   const getEmail = (userData) => {
     if (!userData) return "";
-
-    // If it's already a string email
     if (typeof userData === "string" && userData.includes("@")) return userData;
-
-    // If it's an object
     if (typeof userData === "object" && userData.email) {
       return userData.email;
     }
-
     return "";
   };
 
@@ -172,24 +205,48 @@ export default function IssueDetailPage() {
   };
 
   // Mutations
-  const uploadMutation = useMutation({
-    mutationFn: (file) => {
-      const formData = new FormData();
-      formData.append("file", file);
-      return issuesApi.uploadAttachment(id, formData);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries(["issues", id]);
-      toast.success("Attachment uploaded");
-    },
-    onSettled: () => setUploading(false),
-  });
+ const uploadMutation = useMutation({
+   mutationFn: async (file) => {
+     console.log("Uploading file:", file.name);
+     setUploading(true);
+
+     // Use the corrected API
+     return await attachmentsApi.create(id, file, user?.id);
+   },
+   onSuccess: () => {
+     queryClient.invalidateQueries(["attachments", id]);
+     toast.success("File uploaded successfully!");
+   },
+   onError: (error) => {
+     console.error("Upload error details:", {
+       status: error.response?.status,
+       data: error.response?.data,
+       message: error.message,
+     });
+
+     if (error.response?.status === 405) {
+       toast.error(
+         "Method not allowed. Check if endpoint exists and supports POST."
+       );
+     } else if (error.response?.status === 400) {
+       const errorData = error.response.data;
+       toast.error(`Upload failed: ${JSON.stringify(errorData)}`);
+     } else {
+       toast.error("Failed to upload file");
+     }
+   },
+   onSettled: () => setUploading(false),
+ });
 
   const statusMutation = useMutation({
     mutationFn: (status) => issuesApi.transition(id, status),
     onSuccess: () => {
       queryClient.invalidateQueries(["issues", id]);
-      toast.success("Status updated");
+      toast.success("Status updated successfully!");
+    },
+    onError: (error) => {
+      console.error("Status update error:", error);
+      toast.error("Failed to update status");
     },
   });
 
@@ -198,8 +255,12 @@ export default function IssueDetailPage() {
       issuesApi.assign(id, { assignee_id: assigneeId }),
     onSuccess: () => {
       queryClient.invalidateQueries(["issues", id]);
-      toast.success("Assigned successfully");
+      toast.success("Issue assigned successfully!");
       setAssignOpen(false);
+    },
+    onError: (error) => {
+      console.error("Assignment error:", error);
+      toast.error("Failed to assign issue");
     },
   });
 
@@ -208,124 +269,132 @@ export default function IssueDetailPage() {
     onSuccess: () => {
       queryClient.invalidateQueries(["issues", id]);
       setIsEditing(false);
-      toast.success("Issue updated");
+      toast.success("Issue updated successfully!");
+    },
+    onError: (error) => {
+      console.error("Edit error:", error);
+      toast.error("Failed to update issue");
     },
   });
 
-  const commentMutation = useMutation({
-    mutationFn: (commentData) => commentsApi.create(id, commentData),
+
+const commentMutation = useMutation({
+  mutationFn: async (commentData) => {
+    console.log("DEBUG: Posting comment to issue:", id);
+    console.log("DEBUG: Comment data:", commentData);
+    
+    try {
+      const response = await commentsApi.create(id, {
+        content: commentData.content,
+        visibility: commentData.visibility || "public",
+      });
+      
+      console.log("DEBUG: Comment created successfully:", response.data);
+      return response;
+    } catch (error) {
+      console.error("DEBUG: Full error details:", {
+        status: error.response?.status,
+        data: error.response?.data,
+        message: error.message,
+        url: error.config?.url
+      });
+      throw error;
+    }
+  },
+  onSuccess: () => {
+    queryClient.invalidateQueries(["comments", id]);
+    toast.success("Comment posted successfully!");
+  },
+  onError: (error) => {
+    console.error("Comment error:", error);
+    
+    if (error.response?.status === 500) {
+      toast.error("Server error. Check Django logs for details.");
+    } else if (error.response?.status === 403) {
+      toast.error("You don't have permission to comment on this issue");
+    } else if (error.response?.status === 404) {
+      toast.error("Issue not found");
+    } else {
+      toast.error("Failed to post comment");
+    }
+  },
+});
+
+  const editCommentMutation = useMutation({
+    mutationFn: ({ commentId, content }) =>
+      commentsApi.update(commentId, { content }),
     onSuccess: () => {
       queryClient.invalidateQueries(["comments", id]);
-      toast.success("Comment added");
+      toast.success("Comment updated successfully!");
+    },
+    onError: (error) => {
+      console.error("Edit comment error:", error);
+      toast.error("Failed to update comment");
     },
   });
 
-  // Check permissions
-  const isIssueCreator = currentUser?.email === getEmail(issueRes?.created_by);
-  const isAssignedStaff = currentUser?.email === getEmail(issueRes?.assignee);
+  const deleteCommentMutation = useMutation({
+    mutationFn: (commentId) => commentsApi.delete(commentId),
+    onSuccess: () => {
+      queryClient.invalidateQueries(["comments", id]);
+      toast.success("Comment deleted successfully!");
+    },
+    onError: (error) => {
+      console.error("Delete comment error:", error);
+      toast.error("Failed to delete comment");
+    },
+  });
 
-  // Handle file upload
-  const handleFileUpload = (file) => {
-    setUploading(true);
-    uploadMutation.mutate(file);
-  };
-
-  // Handle comment submission
-  const handleCommentSubmit = (content) => {
-    if (!content.trim()) return;
-
-    commentMutation.mutate({
+  // Handle comment submission from CommentEditor
+  const handlePostComment = async (content) => {
+    return commentMutation.mutateAsync({
       content,
       visibility: commentVisibility,
     });
   };
 
-  // Role-based action handlers
-  const handleClientAction = (action) => {
-    switch (action) {
-      case "confirm_resolution":
-        if (confirm("Confirm this issue is resolved to your satisfaction?")) {
-          statusMutation.mutate("client-approved");
-        }
-        break;
-      case "reopen_issue":
-        if (confirm("Reopen this issue?")) {
-          statusMutation.mutate("reopen");
-        }
-        break;
-      case "close_issue":
-        if (confirm("Close this issue? You can reopen it later if needed.")) {
-          statusMutation.mutate("closed");
-        }
-        break;
-      default:
-        break;
+  // Handle edit comment
+  const handleEditComment = (commentId, newContent) => {
+    editCommentMutation.mutate({ commentId, content: newContent });
+  };
+
+  // Handle delete comment
+  const handleDeleteComment = (commentId) => {
+    if (window.confirm("Are you sure you want to delete this comment?")) {
+      deleteCommentMutation.mutate(commentId);
     }
   };
 
-  const handleManagerAction = (action) => {
-    switch (action) {
-      case "assign_staff":
-        setAssignOpen(true);
-        break;
-      case "close_issue":
-        if (confirm("Close this issue?")) {
-          statusMutation.mutate("closed");
-        }
-        break;
-      case "mark_out_of_scope":
-        if (confirm("Mark this issue as out of scope?")) {
-          statusMutation.mutate("out-of-scope");
-        }
-        break;
-      case "edit_priority":
-        toast.info("Priority edit feature coming soon");
-        break;
-      default:
-        break;
-    }
+  // Handle file upload
+  const handleFileUpload = (file) => {
+    uploadMutation.mutate(file);
   };
 
-  const handleStaffAction = (action) => {
-    switch (action) {
-      case "start_work":
-        statusMutation.mutate("in-progress");
-        break;
-      case "mark_resolved":
-        statusMutation.mutate("resolved");
-        break;
-      case "request_close":
-        if (confirm("Request manager approval to close this issue?")) {
-          statusMutation.mutate("pending-approval");
-        }
-        break;
-      case "add_internal_note":
-        setCommentVisibility((prev) =>
-          prev === "internal" ? "public" : "internal"
-        );
-        toast.info(
-          commentVisibility === "internal"
-            ? "Now posting public comments"
-            : "Now posting internal comments (staff/manager only)"
-        );
-        break;
-      default:
-        break;
-    }
-  };
+  // Check permissions
+  const isIssueCreator = user?.id === issueRes?.created_by?.id;
+  const isAssignedStaff = user?.id === issueRes?.assignee?.id;
+  const currentUserRole = userRole || user?.role;
 
   // Render role-specific buttons
   const renderActionButtons = () => {
     if (!issueRes) return null;
 
     // Client buttons
-    if (userRole === "client" && isIssueCreator) {
+    if (currentUserRole === "client" && isIssueCreator) {
       return (
         <div className="flex flex-wrap gap-2">
           {issueRes.status === "resolved" && (
             <Button
               variant="primary"
-              onClick={() => handleClientAction("confirm_resolution")}
+              onClick={() => {
+                if (
+                  confirm(
+                    "Confirm this issue is resolved to your satisfaction?"
+                  )
+                ) {
+                  statusMutation.mutate("client-approved");
+                }
+              }}
             >
               <CheckCircle size={16} className="mr-2" />
               Confirm Resolution
@@ -334,17 +403,13 @@ export default function IssueDetailPage() {
           {issueRes.status === "closed" && (
             <Button
               variant="secondary"
-              onClick={() => handleClientAction("reopen_issue")}
+              onClick={() => {
+                if (confirm("Reopen this issue?")) {
+                  statusMutation.mutate("reopen");
+                }
+              }}
             >
               Reopen Issue
-            </Button>
-          )}
-          {issueRes.status === "open" && (
-            <Button
-              variant="danger"
-              onClick={() => handleClientAction("close_issue")}
-            >
-              Close Issue
             </Button>
           )}
         </div>
@@ -352,66 +417,56 @@ export default function IssueDetailPage() {
     }
 
     // Manager buttons
-    if (userRole === "manager") {
+    if (currentUserRole === "manager") {
       return (
         <div className="flex flex-wrap gap-2">
-          <Button
-            variant="primary"
-            onClick={() => handleManagerAction("assign_staff")}
-          >
+          <Button variant="primary" onClick={() => setAssignOpen(true)}>
             Assign Staff
           </Button>
 
-          {issueRes.status === "pending-approval" && (
-            <Button
-              variant="primary"
-              onClick={() => handleManagerAction("close_issue")}
-            >
-              Close Issue
-            </Button>
-          )}
-
           <Button
             variant="secondary"
-            onClick={() => handleManagerAction("edit_priority")}
+            onClick={() => {
+              const priorities = ["low", "medium", "high", "critical"];
+              const currentPriority = issueRes?.priority || "low";
+              const newPriority = prompt(
+                `Current priority: ${currentPriority.toUpperCase()}\nEnter new priority (low/medium/high/critical):`,
+                currentPriority
+              );
+              if (
+                newPriority &&
+                priorities.includes(newPriority.toLowerCase())
+              ) {
+                editMutation.mutate({ priority: newPriority.toLowerCase() });
+              }
+            }}
+            className="flex items-center gap-2"
           >
+            <Tag size={14} />
             Edit Priority
           </Button>
-
-          {issueRes.status !== "closed" &&
-            issueRes.status !== "out-of-scope" && (
-              <Button
-                variant="danger"
-                onClick={() => handleManagerAction("mark_out_of_scope")}
-              >
-                Mark Out of Scope
-              </Button>
-            )}
         </div>
       );
     }
 
     // Staff buttons
-    if (userRole === "staff" && isAssignedStaff) {
+    if (currentUserRole === "staff") {
       return (
         <div className="flex flex-wrap gap-2 items-center">
-          <IssueStatusActions
-            issue={issueRes}
-            onChange={statusMutation.mutate}
-          />
-
-          {issueRes.status === "resolved" && (
-            <Button
-              variant="primary"
-              onClick={() => handleStaffAction("request_close")}
-            >
-              Request Close Approval
-            </Button>
+          {(isAssignedStaff || !issueRes.assignee) && (
+            <IssueStatusActions
+              issue={issueRes}
+              onChange={statusMutation.mutate}
+            />
           )}
 
           <Button
             variant={commentVisibility === "internal" ? "primary" : "secondary"}
-            onClick={() => handleStaffAction("add_internal_note")}
+            onClick={() =>
+              setCommentVisibility((prev) =>
+                prev === "internal" ? "public" : "internal"
+              )
+            }
             className="flex items-center gap-2"
           >
             <Lock size={14} />
@@ -426,7 +481,7 @@ export default function IssueDetailPage() {
     return null;
   };
 
-  if (isLoading) {
+  if (authLoading || issueLoading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-teal-500"></div>
@@ -434,7 +489,7 @@ export default function IssueDetailPage() {
     );
   }
 
-  if (error || !issueRes) {
+  if (issueError || !issueRes) {
     return (
       <div className="text-center py-20">
         <AlertCircle className="mx-auto h-16 w-16 text-gray-400" />
@@ -456,15 +511,13 @@ export default function IssueDetailPage() {
   }
 
   const issue = issueRes;
-
-  // FIXED: Get safe display values
   const creatorDisplayName = getDisplayName(issue.created_by);
   const creatorEmail = getEmail(issue.created_by);
   const assigneeDisplayName = getDisplayName(issue.assignee);
   const assigneeEmail = getEmail(issue.assignee);
 
   // Edit mode
-  if (isEditing && (userRole === "manager" || isIssueCreator)) {
+  if (isEditing && (currentUserRole === "manager" || isIssueCreator)) {
     return (
       <motion.div
         initial={{ opacity: 0 }}
@@ -534,7 +587,7 @@ export default function IssueDetailPage() {
 
         <div className="flex items-center gap-4">
           {/* Edit button for creator and managers */}
-          {(isIssueCreator || userRole === "manager") && (
+          {(isIssueCreator || currentUserRole === "manager") && (
             <Button
               variant="secondary"
               onClick={() => {
@@ -599,7 +652,6 @@ export default function IssueDetailPage() {
                     </span>
                   )}
 
-                  {/* FIXED: Safe display of creator */}
                   <span className="text-sm text-gray-500">
                     Created by {creatorDisplayName}
                   </span>
@@ -621,7 +673,6 @@ export default function IssueDetailPage() {
           {/* Original issue description */}
           <div className="bg-white rounded-xl shadow-lg p-6">
             <div className="flex gap-4">
-              {/* User avatar with initials - FIXED */}
               <div className="w-12 h-12 bg-teal-500 rounded-full flex items-center justify-center text-white font-bold text-lg">
                 {getUserInitials(creatorDisplayName)}
               </div>
@@ -653,20 +704,32 @@ export default function IssueDetailPage() {
           {/* Comments section */}
           <div className="bg-white rounded-xl shadow-lg p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">
-              Comments
+              Comments ({sortedComments.length})
+              {commentsError && commentsError.response?.status !== 404 && (
+                <span className="text-red-500 text-sm ml-2">
+                  (Error loading comments)
+                </span>
+              )}
             </h3>
 
-            <div className="space-y-6">
-              {comments.length > 0 ? (
-                [...comments]
-                  .reverse()
-                  .map((comment) => (
-                    <CommentThread
-                      key={comment.id}
-                      comment={comment}
-                      userRole={userRole}
-                    />
-                  ))
+            {/* Comments list */}
+            <div className="space-y-4 mb-6">
+              {commentsLoading ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-teal-500 mx-auto"></div>
+                  <p className="text-gray-500 mt-2">Loading comments...</p>
+                </div>
+              ) : sortedComments.length > 0 ? (
+                sortedComments.map((comment) => (
+                  <CommentThread
+                    key={comment.id}
+                    comment={comment}
+                    userRole={currentUserRole}
+                    currentUser={user}
+                    onEdit={handleEditComment}
+                    onDelete={handleDeleteComment}
+                  />
+                ))
               ) : (
                 <div className="text-center py-8 text-gray-500">
                   <p>No comments yet. Be the first to comment!</p>
@@ -675,12 +738,13 @@ export default function IssueDetailPage() {
             </div>
 
             {/* Comment editor */}
-            <div className="mt-8 pt-6 border-t border-gray-200">
+            <div className="pt-6 border-t border-gray-200">
               <CommentEditor
                 issueId={id}
-                onPost={handleCommentSubmit}
+                onPost={handlePostComment}
                 visibility={commentVisibility}
                 onVisibilityChange={setCommentVisibility}
+                isSubmitting={commentMutation.isPending}
               />
             </div>
           </div>
@@ -688,7 +752,7 @@ export default function IssueDetailPage() {
 
         {/* Sidebar - right column */}
         <div className="space-y-6">
-          {/* Assignee card - FIXED */}
+          {/* Assignee card */}
           <div className="bg-white rounded-xl shadow-lg p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
               <User size={18} /> Assignee
@@ -717,14 +781,14 @@ export default function IssueDetailPage() {
               </div>
             )}
 
-            {userRole === "manager" && (
+            {currentUserRole === "manager" && (
               <Button
                 variant="secondary"
                 onClick={() => setAssignOpen(true)}
                 className="w-full mt-4"
               >
                 {assigneeDisplayName && assigneeDisplayName !== "Unknown"
-                  ? "Reassign"
+                  ? "Reassign Staff"
                   : "Assign Staff"}
               </Button>
             )}
@@ -733,20 +797,32 @@ export default function IssueDetailPage() {
           {/* Attachments card */}
           <div className="bg-white rounded-xl shadow-lg p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <Paperclip size={18} /> Attachments
+              <Paperclip size={18} /> Attachments ({allAttachments.length})
             </h3>
 
             <FileUploader
-              onUpload={handleFileUpload}
-              isUploading={uploading}
-              accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"
+              onUpload={(files) => {
+                if (files && files.length > 0) {
+                  handleFileUpload(files[0]);
+                }
+              }}
+              isUploading={uploading || uploadMutation.isPending}
+              accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
+              maxSize={10 * 1024 * 1024}
             />
 
+            {uploadMutation.isPending && (
+              <div className="mt-2 flex items-center gap-2 text-sm text-teal-600">
+                <div className="animate-spin rounded-full h-3 w-3 border-t-2 border-b-2 border-teal-500"></div>
+                Uploading file...
+              </div>
+            )}
+
             <div className="mt-4 space-y-2">
-              {issue.attachments && issue.attachments.length > 0 ? (
-                issue.attachments.map((attachment) => (
+              {allAttachments.length > 0 ? (
+                allAttachments.map((attachment, index) => (
                   <div
-                    key={attachment.id}
+                    key={attachment.id || index}
                     className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100"
                   >
                     <div className="flex items-center gap-3">
@@ -755,6 +831,7 @@ export default function IssueDetailPage() {
                         <p className="text-sm font-medium text-gray-900 truncate max-w-[180px]">
                           {attachment.filename ||
                             attachment.name ||
+                            attachment.file?.split("/").pop() ||
                             "Unnamed file"}
                         </p>
                         {attachment.size && (
@@ -765,12 +842,12 @@ export default function IssueDetailPage() {
                       </div>
                     </div>
 
-                    {attachment.url && (
+                    {(attachment.url || attachment.file) && (
                       <a
-                        href={attachment.url}
+                        href={attachment.url || attachment.file}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-teal-600 hover:text-teal-700"
+                        className="text-teal-600 hover:text-teal-700 p-1"
                         title="Download"
                       >
                         <Download size={16} />
@@ -779,9 +856,13 @@ export default function IssueDetailPage() {
                   </div>
                 ))
               ) : (
-                <p className="text-center text-gray-500 py-4">
-                  No attachments yet
-                </p>
+                <div className="text-center py-4">
+                  <Paperclip className="mx-auto h-8 w-8 text-gray-400 mb-2" />
+                  <p className="text-gray-500">No attachments yet</p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Upload files using the box above
+                  </p>
+                </div>
               )}
             </div>
           </div>
