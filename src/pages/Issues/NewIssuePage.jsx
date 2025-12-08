@@ -28,7 +28,7 @@ export default function NewIssuePage() {
       queryClient.invalidateQueries({ queryKey: ["issues"] });
       queryClient.resetQueries({ queryKey: ["issues"] }); // ← THIS FORCES FRESH DATA
       toast.success("Issue created successfully!");
-      navigate("/issues");
+      navigate("/app/issues");
     },
     onError: (err) => {
       toast.error(err.response?.data?.detail || "Failed to create issue");

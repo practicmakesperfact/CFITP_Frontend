@@ -36,7 +36,15 @@ export default function ClientDashboard() {
   const user = JSON.parse(localStorage.getItem("user_profile") || "{}");
 
   // Filter issues for this client only
-  const issues = allIssues.filter((i) => i.reporter_email === user.email);
+    const issues = allIssues.filter((i) => {
+      return (
+        i.reporter_email === user.email ||
+        i.created_by_email === user.email ||
+        (i.reporter && i.reporter.id === user.id) ||
+        (i.created_by && i.created_by.id === user.id)
+      );
+    });
+
 
   const open = issues.filter((i) => i.status === "open").length;
   const inProgress = issues.filter((i) => i.status === "in-progress").length;
@@ -82,19 +90,98 @@ export default function ClientDashboard() {
       ).length
   );
 
+  const chartData = dailyCounts.some(count => count>0)
+    ? dailyCounts
+    : [0, 0, 0, 0, 0, 0, 0];
+
+  // const lineOptions = {
+  //   series: [{
+  //           name: "Issues", 
+  //           data: dailyCounts 
+  //           }],
+  //   colors: ["#0EA5A4"],
+  //   chart: { 
+  //           type: "area", 
+  //           height: 300, 
+  //           toolbar: { show: false } 
+  //         },
+  //   xaxis: {
+  //     categories: weekDays.map((d) => format(d, "EEE")),
+  //     labels: { 
+  //              style: { colors: "#6b7280" } },
+  //           },
+  //   yaxis: { 
+  //             min: 0, 
+  //             max: Math.max(...dailyCounts, 5) + 1, tickAmount: 4
+  //           },
+  //   fill: { opacity: 0.1 },
+  //   stroke: { curve: "smooth", width: 3 },
+  //   dataLabels: { enabled: false },
+  //   grid: { show: false },
+  // };
   const lineOptions = {
-    series: [{ name: "Issues", data: dailyCounts }],
+    series: [
+      {
+        name: "Issues",
+        data: chartData,
+      },
+    ],
     colors: ["#0EA5A4"],
-    chart: { type: "area", height: 300, toolbar: { show: false } },
+    chart: {
+      type: "bar", // ✅ Changed from "area" to "bar" for visibility
+      height: 300,
+      toolbar: { show: false },
+    },
     xaxis: {
       categories: weekDays.map((d) => format(d, "EEE")),
-      labels: { style: { colors: "#6b7280" } },
+      labels: {
+        style: {
+          colors: "#6b7280",
+          fontSize: "14px",
+          fontWeight: 600,
+        },
+      },
+      axisBorder: { show: true },
+      axisTicks: { show: true },
     },
-    yaxis: { min: 0, max: Math.max(...dailyCounts, 5) + 1, tickAmount: 4 },
-    fill: { opacity: 0.1 },
-    stroke: { curve: "smooth", width: 3 },
-    dataLabels: { enabled: false },
-    grid: { show: false },
+    yaxis: {
+      min: 0,
+      max: Math.max(...chartData, 5) + 1,
+      tickAmount: 4,
+      labels: {
+        style: {
+          colors: "#6b7280",
+          fontSize: "12px",
+        },
+      },
+    },
+    plotOptions: {
+      bar: {
+        borderRadius: 6,
+        columnWidth: "60%", // Makes bars wider
+        dataLabels: {
+          position: "top", // Shows numbers on top of bars
+        },
+      },
+    },
+    dataLabels: {
+      enabled: true, // ✅ Shows numbers on bars
+      offsetY: -20,
+      style: {
+        fontSize: "12px",
+        colors: ["#374151"],
+      },
+    },
+    grid: {
+      borderColor: "#e5e7eb",
+      strokeDashArray: 4,
+      position: "back",
+    },
+    tooltip: {
+      y: {
+        formatter: (value) => `${value} issue${value !== 1 ? "s" : ""}`,
+      },
+    },
   };
 
   const getFilteredIssues = () => {
@@ -131,7 +218,7 @@ export default function ClientDashboard() {
           </p>
         </div>
         <button
-          onClick={() => navigate("/issues/new")}
+          onClick={() => navigate("/app/issues/new")}
           className="bg-[#0EA5A4] hover:bg-teal-700 text-white px-8 py-4 rounded-2xl font-bold flex items-center gap-3 shadow-lg transition-all hover:scale-105"
         >
           <Plus size={28} /> New Issue
