@@ -34,7 +34,7 @@ export default function FeedbackPage() {
     localStorage.setItem("cfitp_feedback", JSON.stringify(allFeedback));
     toast.success("Thank you! Your feedback has been sent.");
     setFeedback("");
-    setTimeout(() => navigate("/feedback/my"), 1500);
+    setTimeout(() => navigate("/app/feedback/my"), 1500);
   };
 
   return (

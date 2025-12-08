@@ -543,12 +543,14 @@ import IssuesPage from "../pages/Issues/IssuesPage";
 import IssueDetailPage from "../pages/Issues/IssueDetailPage";
 import NewIssuePage from "../pages/Issues/NewIssuePage";
 import FeedbackPage from "../pages/Feedback/FeedbackPage";
+
 import ReportsPage from "../pages/Reports/ReportsPage";
 import NotificationsPage from "../pages/notifications/NotificationsPage";
 import ProfilePage from "../pages/Profile/ProfilePage";
 import ProfileEdit from "../pages/Profile/ProfileEdit";
 import ProfileViewer from "../pages/Profile/ProfileViewer";
 import UsersPage from "../pages/Users/UsersPage";
+import MyFeedback from './../pages/Feedback/MyFeedback';
 
 const router = createBrowserRouter([
   {
@@ -624,6 +626,7 @@ const router = createBrowserRouter([
 
       // FEEDBACK
       { path: "feedback", element: <FeedbackPage /> },
+      { path: "feedback/my", element: <MyFeedback /> },
 
       // REPORTS (Manager/Admin only)
       {

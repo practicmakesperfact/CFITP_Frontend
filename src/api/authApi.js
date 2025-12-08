@@ -5,7 +5,7 @@ export const authApi = {
   login: async (credentials) => {
     try {
       const response = await axiosClient.post("/auth/login/", credentials);
-      console.log("Login successful:", response.data);
+      
       return response;
     } catch (error) {
       console.error("Login error:", error.response?.data || error.message);

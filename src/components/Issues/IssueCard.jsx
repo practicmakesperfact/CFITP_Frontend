@@ -28,7 +28,7 @@ export default function IssueCard({ issue }) {
   return (
     <motion.div
       whileHover={{ scale: 1.02 }}
-      onClick={() => navigate(`/issues/${issue.id}`)}
+      onClick={() => navigate(`/app/issues/${issue.id}`)}
       className="cursor-pointer p-6 bg-white rounded-2xl shadow-md border border-gray-200 hover:shadow-xl transition"
     >
       {/* TITLE*/}
