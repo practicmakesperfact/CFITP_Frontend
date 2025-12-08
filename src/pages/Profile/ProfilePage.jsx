@@ -14,7 +14,7 @@ import {
   Lock,
 } from "lucide-react";
 import toast from "react-hot-toast";
-import { useAuth } from "../app/hooks.js";
+import { useAuth } from "../../app/hooks.js";
 
 export default function ProfilePage() {
   const { user } = useAuth();

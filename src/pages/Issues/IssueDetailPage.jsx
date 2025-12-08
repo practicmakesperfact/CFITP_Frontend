@@ -46,6 +46,13 @@ export default function IssueDetailPage() {
   const { userRole } = useUIStore();
   const { user: currentUser, isLoading: authLoading } = useAuth();
 
+
+  useEffect(() => {
+    if (id === "new") {
+      navigate("/issues/new");
+      return;
+    }
+  }, [id, navigate]);
   // Get user from localStorage as fallback
   const getLocalUser = () => {
     try {

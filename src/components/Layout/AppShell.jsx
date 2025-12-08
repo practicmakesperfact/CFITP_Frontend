@@ -36,33 +36,37 @@ export default function AppShell() {
       navigate("/login", { replace: true });
       return null;
     }
-  const menuConfig = {
-    client: [
-      { path: "/dashboard", label: "Dashboard", icon: Home },
-      { path: "/issues", label: "My Issues", icon: Bug },
-      { path: "/feedback/new", label: "Submit Feedback", icon: MessageSquare },
-      { path: "/profile", label: "Profile", icon: User },
-    ],
-    staff: [
-      { path: "/dashboard", label: "Dashboard", icon: Home },
-      { path: "/issues", label: "Assigned Issues", icon: Bug },
-      { path: "/profile", label: "Profile", icon: User },
-    ],
-    manager: [
-      { path: "/dashboard", label: "Dashboard", icon: Home },
-      { path: "/issues", label: "All Issues", icon: Bug },
-      { path: "/reports", label: "Reports", icon: BarChart3 },
-      { path: "/profile", label: "Profile", icon: User },
-    ],
-    admin: [
-      { path: "/dashboard", label: "Dashboard", icon: Home },
-      { path: "/issues", label: "All Issues", icon: Bug },
-      { path: "/reports", label: "Reports", icon: BarChart3 },
-      { path: "/notifications", label: "Notifications", icon: Bell },
-      { path: "/users", label: "Users", icon: Users },
-      { path: "/profile", label: "Profile", icon: User },
-    ],
-  };
+const menuConfig = {
+  client: [
+    { path: "/app/dashboard/client", label: "Dashboard", icon: Home },
+    { path: "/app/issues", label: "My Issues", icon: Bug },
+    { path: "/app/feedback", label: "Feedback", icon: MessageSquare },
+    { path: "/app/profile", label: "Profile", icon: User },
+  ],
+
+  staff: [
+    { path: "/app/dashboard/staff", label: "Dashboard", icon: Home },
+    { path: "/app/issues", label: "Assigned Issues", icon: Bug },
+    { path: "/app/profile", label: "Profile", icon: User },
+  ],
+
+  manager: [
+    { path: "/app/dashboard/manager", label: "Dashboard", icon: Home },
+    { path: "/app/issues", label: "All Issues", icon: Bug },
+    { path: "/app/reports", label: "Reports", icon: BarChart3 },
+    { path: "/app/profile", label: "Profile", icon: User },
+  ],
+
+  admin: [
+    { path: "/app/dashboard/admin", label: "Dashboard", icon: Home },
+    { path: "/app/issues", label: "All Issues", icon: Bug },
+    { path: "/app/reports", label: "Reports", icon: BarChart3 },
+    { path: "/app/notifications", label: "Notifications", icon: Bell },
+    { path: "/app/users", label: "Users", icon: Users },
+    { path: "/app/profile", label: "Profile", icon: User },
+  ],
+};
+
 
   const menuItems = menuConfig[userRole] || menuConfig.client;
 
