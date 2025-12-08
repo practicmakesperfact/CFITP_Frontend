@@ -531,6 +531,7 @@ import AppShell from "../components/Layout/AppShell";
 import Login from "../pages/Auth/Login";
 import Register from "../pages/Auth/Register";
 import ResetPassword from "../pages/Auth/ResetPassword";
+import RequestAccess from "../pages/Auth/RequestAccess";
 
 // Dashboard Pages
 import ClientDashboard from "../pages/Dashboards/ClientDashboard";
@@ -568,6 +569,10 @@ const router = createBrowserRouter([
   {
     path: "/reset-password",
     element: <ResetPassword />,
+  },
+  {
+    path: "/request-access" ,
+    element:<RequestAccess />,
   },
 
   // PROTECTED APP LAYOUT
