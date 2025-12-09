@@ -269,9 +269,7 @@ export default function Login() {
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: 0.2 }}
             className="absolute top-8 right-8 w-24 h-24 opacity-20"
-          >
-          
-          </motion.div>
+          ></motion.div>
 
           <div className="relative">
             {/* Company Header */}
@@ -281,7 +279,6 @@ export default function Login() {
               transition={{ delay: 0.3 }}
               className="flex items-center gap-4 mb-8"
             >
-             
               <div>
                 <h1 className="text-3xl font-bold tracking-wide">ANRS</h1>
                 <p className="text-teal-200 text-sm font-semibold tracking-wider">
@@ -670,8 +667,23 @@ export default function Login() {
                 <div className="flex items-center justify-between">
                   <label className="flex items-center cursor-pointer group">
                     <div className="relative">
-                      <input type="checkbox" className="sr-only" />
-                      <div className="w-5 h-5 bg-gray-200 rounded border-2 border-gray-300 group-hover:border-teal-400 transition-colors"></div>
+                      <input
+                        type="checkbox"
+                        className="sr-only"
+                        id="remember-device"
+                        {...register("rememberDevice")}
+                      />
+                      <div
+                        className={`w-5 h-5 rounded border-2 transition-all duration-200 flex items-center justify-center ${
+                          watch("rememberDevice")
+                            ? "bg-teal-500 border-teal-500"
+                            : "bg-gray-200 border-gray-300 group-hover:border-teal-400"
+                        }`}
+                      >
+                        {watch("rememberDevice") && (
+                          <Check size={12} className="text-white font-bold" />
+                        )}
+                      </div>
                     </div>
                     <span className="ml-2 text-sm text-gray-600">
                       Remember this device
