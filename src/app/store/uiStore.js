@@ -21,6 +21,7 @@
 // }));
 
 
+
 import { create } from 'zustand';
 
 export const useUIStore = create((set) => ({
@@ -28,6 +29,8 @@ export const useUIStore = create((set) => ({
   userProfile: JSON.parse(localStorage.getItem('user_profile') || 'null'),
   darkMode: false,
   sidebarOpen: true,
+  loading: false,  // ADD THIS
+  setLoading: (loading) => set({ loading }),  // ADD THIS
 
   setUserRole: (role) => {
     localStorage.setItem('user_role', role);

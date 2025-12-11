@@ -1,5 +1,5 @@
-
-import React, { useState, useEffect, useRef } from "react";
+// src/pages/Reports/ReportsPage.jsx
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Download,
@@ -22,26 +22,35 @@ import {
   Sparkles,
   Database,
   Activity,
-  TrendingDown,
   ArrowUpRight,
   ArrowDownRight,
   DownloadCloud,
   Settings,
   Zap,
-  Bell,
-  LineChart,
   Target,
   Award,
   ChartBar,
   ChartLine,
   ChartPie,
   BarChart,
-  Download as DownloadIcon,
-  ExternalLink,
   CalendarDays,
-  AlertTriangle,
   Check,
-  XCircle,
+  FileBarChart,
+  TrendingDown,
+  BarChart as BarChartIcon,
+  LineChart as LineChartIcon,
+  PieChart as PieChartIcon,
+  History,
+  AlertTriangle,
+  Users as UsersIcon,
+  MessageSquare,
+  ThumbsUp,
+  Star,
+  Activity as ActivityIcon,
+  X,
+  Plus,
+  Search,
+  ExternalLink,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -49,48 +58,96 @@ import { reportsApi } from "../../api/reportsApi.js";
 import {
   format,
   subDays,
+  subMonths,
   startOfMonth,
   endOfMonth,
   parseISO,
   differenceInDays,
   formatDistanceToNow,
+  isAfter,
+  isBefore,
+  addDays,
+  startOfDay,
+  endOfDay,
 } from "date-fns";
-// import CSVExport from "../../components/Reports/CSVExport.jsx";
 import ChartCard from "../../components/Dashboard/ChartCard.jsx";
-// import StatCard from "../../components/Dashboard/StatCard.jsx";
 import { useUIStore } from "../../app/store/uiStore.js";
+import { saveAs } from "file-saver";
 
 export default function ReportsPage() {
   const queryClient = useQueryClient();
   const setLoading = useUIStore((state) => state.setLoading);
+  const userRole = useUIStore((state) => state.userRole);
 
   // State management
   const [generating, setGenerating] = useState(false);
   const [dateRange, setDateRange] = useState("month");
   const [startDate, setStartDate] = useState(
-    format(subDays(new Date(), 30), "yyyy-MM-dd")
+    format(startOfMonth(new Date()), "yyyy-MM-dd")
   );
-  const [endDate, setEndDate] = useState(format(new Date(), "yyyy-MM-dd"));
-  const [reportType, setReportType] = useState("overview");
+  const [endDate, setEndDate] = useState(
+    format(endOfMonth(new Date()), "yyyy-MM-dd")
+  );
+  const [reportType, setReportType] = useState("issues_by_status");
+  const [reportFormat, setReportFormat] = useState("excel");
   const [activeTab, setActiveTab] = useState("analytics");
-  const [exportData, setExportData] = useState([]);
   const [reportId, setReportId] = useState(null);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(false);
-  const [realTimeUpdates, setRealTimeUpdates] = useState(true);
-  const [selectedMetrics, setSelectedMetrics] = useState([
-    "issues",
-    "performance",
-    "feedback",
-    "satisfaction",
-  ]);
+  const [realTimeUpdates, setRealTimeUpdates] = useState(false);
   const [exportFormat, setExportFormat] = useState("excel");
+  const [generatedReports, setGeneratedReports] = useState([]);
+  const [filters, setFilters] = useState({
+    priority: [],
+    status: [],
+    assignee: [],
+    includeAttachments: false,
+    comparePeriod: false,
+  });
 
-  // Refs for scroll animations
+  // Refs
   const headerRef = useRef(null);
-  const chartsRef = useRef(null);
 
-  // Date presets with icons
+  // Report types
+  const reportTypes = [
+    {
+      value: "issues_by_status",
+      label: "Issues by Status",
+      description: "Distribution of issues across different statuses",
+      icon: <PieChartIcon size={16} />,
+      color: "teal",
+    },
+    {
+      value: "issues_by_assignee",
+      label: "Issues by Assignee",
+      description: "Issues assigned to team members",
+      icon: <UsersIcon size={16} />,
+      color: "blue",
+    },
+    {
+      value: "issues_by_priority",
+      label: "Issues by Priority",
+      description: "Issue distribution by priority levels",
+      icon: <AlertTriangle size={16} />,
+      color: "orange",
+    },
+    {
+      value: "feedback_summary",
+      label: "Feedback Summary",
+      description: "Client feedback and satisfaction analysis",
+      icon: <MessageSquare size={16} />,
+      color: "purple",
+    },
+    {
+      value: "team_performance",
+      label: "Team Performance",
+      description: "Staff performance and efficiency metrics",
+      icon: <ActivityIcon size={16} />,
+      color: "green",
+    },
+  ];
+
+  // Date presets
   const datePresets = [
     {
       label: "Today",
@@ -130,333 +187,160 @@ export default function ReportsPage() {
     },
   ];
 
-  // Report types with detailed descriptions
-  const reportTypes = [
-    {
-      value: "overview",
-      label: "Overview Dashboard",
-      description: "High-level metrics and trends",
-      icon: <Eye size={16} />,
-      color: "teal",
-    },
-    {
-      value: "issues",
-      label: "Issues Analysis",
-      description: "Detailed issue tracking and resolution",
-      icon: <AlertCircle size={16} />,
-      color: "orange",
-    },
-    {
-      value: "performance",
-      label: "Team Performance",
-      description: "Staff productivity and efficiency",
-      icon: <TrendingUp size={16} />,
-      color: "blue",
-    },
-    {
-      value: "feedback",
-      label: "Feedback Analytics",
-      description: "Client feedback and satisfaction",
-      icon: <Users size={16} />,
-      color: "purple",
-    },
-    {
-      value: "audit",
-      label: "Audit & Security",
-      description: "System logs and security events",
-      icon: <Shield size={16} />,
-      color: "red",
-    },
-  ];
-
-  // Metrics cards configuration
-  const metricCards = [
-    {
-      id: "total_issues",
-      title: "Total Issues",
-      description: "Issues reported in selected period",
-      icon: <AlertCircle size={20} />,
-      color: "teal",
-      trend: true,
-      format: "number",
-    },
-    {
-      id: "resolved_issues",
-      title: "Resolved Issues",
-      description: "Successfully closed issues",
-      icon: <CheckCircle size={20} />,
-      color: "green",
-      trend: true,
-      format: "number",
-    },
-    {
-      id: "avg_resolution_time",
-      title: "Avg. Resolution Time",
-      description: "Average time to resolve issues",
-      icon: <Clock size={20} />,
-      color: "blue",
-      trend: false,
-      format: "duration",
-    },
-    {
-      id: "sla_compliance",
-      title: "SLA Compliance",
-      description: "Service Level Agreement compliance rate",
-      icon: <Target size={20} />,
-      color: "purple",
-      trend: true,
-      format: "percentage",
-    },
-    {
-      id: "total_feedback",
-      title: "Total Feedback",
-      description: "Feedback submissions received",
-      icon: <Users size={20} />,
-      color: "orange",
-      trend: true,
-      format: "number",
-    },
-    {
-      id: "satisfaction_score",
-      title: "Satisfaction Score",
-      description: "Average client satisfaction rating",
-      icon: <Award size={20} />,
-      color: "pink",
-      trend: true,
-      format: "percentage",
-    },
-    {
-      id: "active_users",
-      title: "Active Users",
-      description: "Users active in the system",
-      icon: <Activity size={20} />,
-      color: "indigo",
-      trend: true,
-      format: "number",
-    },
-    {
-      id: "avg_response_time",
-      title: "Avg. Response Time",
-      description: "Average first response time",
-      icon: <Zap size={20} />,
-      color: "yellow",
-      trend: false,
-      format: "duration",
-    },
-  ];
-
-  // Fetch reports data with real-time updates
+  // Fetch analytics data
   const {
-    data: reportsData,
-    isLoading,
-    refetch,
-    error,
-    isFetching,
+    data: analyticsData,
+    isLoading: analyticsLoading,
+    refetch: refetchAnalytics,
+    error: analyticsError,
+    isFetching: analyticsFetching,
   } = useQuery({
-    queryKey: ["reports", dateRange, startDate, endDate, reportType],
+    queryKey: ["analytics", dateRange, startDate, endDate, reportType, filters],
     queryFn: async () => {
       setLoading(true);
       try {
-        const response = await reportsApi.getReports({
-          period: dateRange,
+        const params = {
           start_date: startDate,
           end_date: endDate,
           report_type: reportType,
-          include_details: true,
-          real_time: realTimeUpdates,
-        });
+        };
 
-        // Process the data
-        const processedData = processReportData(response.data);
-        return { ...response, processedData };
+        // Add filters to params
+        if (filters.priority.length > 0) {
+          params.priority = filters.priority.join(",");
+        }
+        if (filters.status.length > 0) {
+          params.status = filters.status.join(",");
+        }
+
+        const response = await reportsApi.getAnalyticsData(params);
+        return response.data;
       } catch (err) {
+        console.error("Error fetching analytics:", err);
+        toast.error("Failed to load analytics data");
         throw err;
       } finally {
         setLoading(false);
       }
     },
     refetchOnWindowFocus: false,
-    staleTime: realTimeUpdates ? 30000 : 60000, // 30 seconds for real-time, 1 minute otherwise
-    refetchInterval: autoRefresh ? 60000 : false, // Auto-refresh every minute if enabled
-    retry: 3,
-    retryDelay: 1000,
+    staleTime: 30000,
+    retry: 2,
   });
 
-  // Fetch real-time updates
-  const { data: realTimeData } = useQuery({
+  // Fetch real-time metrics
+  const {
+    data: realTimeData,
+    isLoading: metricsLoading,
+    refetch: refetchMetrics,
+  } = useQuery({
     queryKey: ["realtime-metrics"],
     queryFn: () => reportsApi.getRealtimeMetrics(),
     enabled: realTimeUpdates,
-    refetchInterval: realTimeUpdates ? 10000 : false, // 10 seconds for real-time updates
+    refetchInterval: realTimeUpdates ? 10000 : false,
+    staleTime: 0,
   });
 
-  // Mutation for PDF generation
-  const pdfMutation = useMutation({
-    mutationFn: (params) => reportsApi.generatePDFReport(params),
+  // Fetch generated reports
+  const {
+    data: reportsList,
+    isLoading: reportsLoading,
+    refetch: refetchReports,
+  } = useQuery({
+    queryKey: ["generated-reports"],
+    queryFn: () => reportsApi.getReports(),
+    enabled: true,
+  });
+
+  // Create report mutation
+  const createReportMutation = useMutation({
+    mutationFn: (data) => reportsApi.createReport(data),
     onMutate: () => {
       setGenerating(true);
-      toast.loading(
-        <div className="flex flex-col">
-          <span className="font-medium">Starting PDF Generation</span>
-          <span className="text-sm opacity-75">
-            Preparing your comprehensive report...
-          </span>
-        </div>,
-        { duration: 3000 }
-      );
+      toast.loading("Starting report generation...", {
+        id: "report-generation",
+      });
     },
     onSuccess: (response) => {
-      const { report_id, estimated_completion } = response.data;
-      setReportId(report_id);
-      toast.dismiss();
+      const report = response.data;
+      setReportId(report.id);
 
-      toast.success(
-        <div className="flex flex-col">
-          <span className="font-medium">PDF Generation Started</span>
-          <span className="text-sm opacity-75">
-            Estimated completion:{" "}
-            {formatDistanceToNow(new Date(estimated_completion))}
-          </span>
-        </div>
-      );
+      toast.success("Report generation started!", {
+        id: "report-generation",
+      });
 
       // Start polling for status
-      checkReportStatus(report_id);
+      pollReportStatus(report.id);
+
+      // Refresh reports list
+      setTimeout(() => refetchReports(), 2000);
     },
     onError: (error) => {
       setGenerating(false);
-      toast.dismiss();
       toast.error(
-        <div className="flex flex-col">
-          <span className="font-medium">PDF Generation Failed</span>
-          <span className="text-sm opacity-75">
-            {error.message || "Please try again"}
-          </span>
-        </div>
+        `Failed to create report: ${
+          error.response?.data?.detail || error.message
+        }`,
+        {
+          id: "report-generation",
+        }
       );
     },
   });
 
-  // Process report data from API
-  const processReportData = (data) => {
-    if (!data) return null;
-
-    // Calculate trends and percentages
-    const processed = { ...data };
-
-    // Calculate trends for metrics
-    if (processed.summary && processed.summary.previous_period) {
-      Object.keys(processed.summary.current).forEach((key) => {
-        const current = processed.summary.current[key];
-        const previous = processed.summary.previous_period[key];
-
-        if (typeof current === "number" && typeof previous === "number") {
-          processed.summary.trends = processed.summary.trends || {};
-          processed.summary.trends[key] = {
-            value: current,
-            previous: previous,
-            change: ((current - previous) / previous) * 100,
-            direction: current >= previous ? "up" : "down",
-          };
-        }
-      });
-    }
-
-    // Format dates for display
-    if (processed.period) {
-      processed.period.formatted = {
-        start: format(parseISO(processed.period.start), "MMM dd, yyyy"),
-        end: format(parseISO(processed.period.end), "MMM dd, yyyy"),
-        duration:
-          differenceInDays(
-            parseISO(processed.period.end),
-            parseISO(processed.period.start)
-          ) + 1,
-      };
-    }
-
-    return processed;
-  };
-
   // Poll for report status
-  const checkReportStatus = async (id) => {
-    try {
-      const statusResponse = await reportsApi.checkReportStatus(id);
-      const { status, download_url, error_message, progress } =
-        statusResponse.data;
+  const pollReportStatus = useCallback(
+    async (id) => {
+      try {
+        const response = await reportsApi.getReportStatus(id);
+        const report = response.data;
 
-      if (status === "completed") {
-        setGenerating(false);
+        if (report.status === "generated" && report.result_available) {
+          setGenerating(false);
 
-        // Show completion toast
-        toast.success(
-          <div className="flex items-center gap-3">
-            <CheckCircle className="w-5 h-5 text-green-500" />
+          toast.success(
+            <div className="flex items-center gap-3">
+              <CheckCircle className="w-5 h-5 text-green-500" />
+              <div className="flex flex-col">
+                <span className="font-medium">Report Ready!</span>
+                <span className="text-sm opacity-75">
+                  Click here to download
+                </span>
+              </div>
+            </div>,
+            {
+              duration: 5000,
+              onClick: () => handleDownloadReportById(id),
+            }
+          );
+
+          setReportId(null);
+          refetchReports();
+        } else if (report.status === "failed") {
+          setGenerating(false);
+          toast.error(
             <div className="flex flex-col">
-              <span className="font-medium">PDF Report Ready</span>
+              <span className="font-medium">Report Generation Failed</span>
               <span className="text-sm opacity-75">
-                Click to download your report
+                Please try again or contact support
               </span>
             </div>
-          </div>,
-          {
-            duration: 5000,
-            onClick: () => {
-              const link = document.createElement("a");
-              link.href = download_url;
-              link.download = `CFITP_Report_${format(
-                new Date(),
-                "yyyy-MM-dd_HHmm"
-              )}.pdf`;
-              link.target = "_blank";
-              document.body.appendChild(link);
-              link.click();
-              document.body.removeChild(link);
-            },
-          }
-        );
-
-        setReportId(null);
-
-        // Refresh data after report generation
-        queryClient.invalidateQueries(["reports"]);
-      } else if (status === "failed") {
-        setGenerating(false);
-        toast.error(
-          <div className="flex flex-col">
-            <span className="font-medium">PDF Generation Failed</span>
-            <span className="text-sm opacity-75">
-              {error_message || "Please try again"}
-            </span>
-          </div>
-        );
-        setReportId(null);
-      } else if (status === "processing") {
-        // Update toast with progress
-        toast.loading(
-          <div className="flex flex-col">
-            <span className="font-medium">Generating PDF Report</span>
-            <div className="flex items-center gap-2 mt-1">
-              <div className="w-full bg-gray-200 rounded-full h-1.5">
-                <div
-                  className="bg-teal-600 h-1.5 rounded-full transition-all duration-300"
-                  style={{ width: `${progress || 0}%` }}
-                ></div>
-              </div>
-              <span className="text-xs font-medium">{progress || 0}%</span>
-            </div>
-          </div>,
-          { id: "pdf-progress" }
-        );
-
-        // Check again in 2 seconds
-        setTimeout(() => checkReportStatus(id), 2000);
+          );
+          setReportId(null);
+        } else if (
+          report.status === "pending" ||
+          report.status === "processing"
+        ) {
+          // Still processing, check again in 3 seconds
+          setTimeout(() => pollReportStatus(id), 3000);
+        }
+      } catch (error) {
+        console.error("Error polling report status:", error);
+        setTimeout(() => pollReportStatus(id), 5000);
       }
-    } catch (error) {
-      console.error("Error checking report status:", error);
-      setTimeout(() => checkReportStatus(id), 3000);
-    }
-  };
+    },
+    [refetchReports]
+  );
 
   // Handle date preset selection
   const handleDatePreset = (preset) => {
@@ -478,11 +362,11 @@ export default function ReportsPage() {
         setEndDate(format(today, "yyyy-MM-dd"));
         break;
       case "quarter":
-        setStartDate(format(subDays(today, 90), "yyyy-MM-dd"));
+        setStartDate(format(subMonths(today, 3), "yyyy-MM-dd"));
         setEndDate(format(today, "yyyy-MM-dd"));
         break;
       case "year":
-        setStartDate(format(subDays(today, 365), "yyyy-MM-dd"));
+        setStartDate(format(subMonths(today, 12), "yyyy-MM-dd"));
         setEndDate(format(today, "yyyy-MM-dd"));
         break;
       default:
@@ -503,223 +387,298 @@ export default function ReportsPage() {
     }
   };
 
-  // Generate PDF report
-  const generatePDFReport = () => {
-    const params = {
-      report_type: reportType,
-      date_range: dateRange,
-      start_date: startDate,
-      end_date: endDate,
-      include_charts: true,
-      include_tables: true,
-      include_summary: true,
-      format: "pdf",
-      orientation: "landscape",
-      quality: "high",
-    };
-
-    pdfMutation.mutate(params);
+  // Handle filter changes
+  const handleFilterChange = (filterType, value) => {
+    setFilters((prev) => {
+      const newFilters = { ...prev };
+      if (filterType === "priority" || filterType === "status") {
+        if (newFilters[filterType].includes(value)) {
+          newFilters[filterType] = newFilters[filterType].filter(
+            (item) => item !== value
+          );
+        } else {
+          newFilters[filterType] = [...newFilters[filterType], value];
+        }
+      } else {
+        newFilters[filterType] = value;
+      }
+      return newFilters;
+    });
   };
 
-  // Export to different formats
-  const handleExport = async (format) => {
-    try {
-      toast.loading(`Preparing ${format.toUpperCase()} export...`);
+  // Clear all filters
+  const clearFilters = () => {
+    setFilters({
+      priority: [],
+      status: [],
+      assignee: [],
+      includeAttachments: false,
+      comparePeriod: false,
+    });
+    toast.success("All filters cleared");
+  };
 
-      let exportUrl;
+  // Apply filters
+  const applyFilters = () => {
+    refetchAnalytics();
+    toast.success("Filters applied successfully");
+  };
+
+  // Generate PDF/Excel/CSV report
+  const generateReport = (format = "excel") => {
+    const reportData = {
+      type: reportType,
+      format: format,
+      parameters: {
+        start_date: startDate,
+        end_date: endDate,
+        date_range: dateRange,
+        ...filters,
+      },
+    };
+
+    createReportMutation.mutate(reportData);
+  };
+
+  // Quick export (sync)
+  const handleQuickExport = async (format) => {
+    try {
+      toast.loading(`Generating ${format.toUpperCase()} export...`);
+
+      const params = {
+        start_date: startDate,
+        end_date: endDate,
+        report_type: reportType,
+      };
+
+      let exportFunction;
+      let filename;
+      let contentType;
+
       switch (format) {
         case "excel":
-          exportUrl = await reportsApi.exportExcel({
-            report_type: reportType,
-            start_date: startDate,
-            end_date: endDate,
-          });
+          exportFunction = reportsApi.exportExcel;
+          filename = `CFITP_Report_${reportType}_${format(
+            new Date(),
+            "yyyy-MM-dd"
+          )}.xlsx`;
+          contentType =
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
           break;
         case "csv":
-          exportUrl = await reportsApi.exportCSV({
-            report_type: reportType,
-            start_date: startDate,
-            end_date: endDate,
-          });
+          exportFunction = reportsApi.exportCSV;
+          filename = `CFITP_Report_${reportType}_${
+            new Date().toISOString().split("T")[0]
+          }.csv`;
+          contentType = "text/csv";
           break;
         case "json":
-          exportUrl = await reportsApi.exportJSON({
-            report_type: reportType,
-            start_date: startDate,
-            end_date: endDate,
-          });
+          exportFunction = reportsApi.exportJSON;
+          filename = `CFITP_Report_${reportType}_${format(
+            new Date(),
+            "yyyy-MM-dd"
+          )}.json`;
+          contentType = "application/json";
           break;
         default:
-          throw new Error("Unsupported export format");
+          throw new Error("Unsupported format");
       }
 
-      // Trigger download
-      const link = document.createElement("a");
-      link.href = exportUrl;
-      link.download = `CFITP_Report_${reportType}_${format(
-        new Date(),
-        "yyyy-MM-dd"
-      )}.${format}`;
-      link.click();
+      const response = await exportFunction(params);
 
-      toast.success(
-        <div className="flex items-center gap-2">
-          <DownloadCloud className="w-4 h-4" />
-          <span>{format.toUpperCase()} export completed</span>
-        </div>
-      );
+      // Handle blob response
+      const blob = new Blob([response.data], { type: contentType });
+      saveAs(blob, filename);
+
+      toast.success(`${format.toUpperCase()} export completed!`);
     } catch (error) {
+      console.error("Export error:", error);
       toast.error(`Export failed: ${error.message}`);
     }
   };
 
-  // Prepare chart data with real-time updates
-  const prepareChartData = () => {
-    const data = reportsData?.processedData || {};
-    const realTime = realTimeData?.data || {};
+  // Download report by ID
+  const handleDownloadReportById = async (reportId) => {
+    try {
+      const response = await reportsApi.downloadReport(reportId);
 
-    // Merge real-time data if available
-    const mergedData = { ...data, ...realTime };
+      // Extract filename from content-disposition header
+      const contentDisposition = response.headers["content-disposition"];
+      let filename = `report_${reportId}.${reportFormat}`;
 
-    return {
-      issuesByStatus: {
-        type: "donut",
-        data: {
-          series: [
-            mergedData.issues_by_status?.open || 0,
-            mergedData.issues_by_status?.in_progress || 0,
-            mergedData.issues_by_status?.resolved || 0,
-            mergedData.issues_by_status?.closed || 0,
-          ],
-          labels: ["Open", "In Progress", "Resolved", "Closed"],
-          colors: ["#EF4444", "#F59E0B", "#10B981", "#0EA5A4"],
-        },
-      },
-      issuesByPriority: {
-        type: "bar",
-        data: {
-          series: [
-            mergedData.issues_by_priority?.low || 0,
-            mergedData.issues_by_priority?.medium || 0,
-            mergedData.issues_by_priority?.high || 0,
-            mergedData.issues_by_priority?.critical || 0,
-          ],
-          categories: ["Low", "Medium", "High", "Critical"],
-          colors: ["#10B981", "#F59E0B", "#EF4444", "#DC2626"],
-        },
-      },
-      feedbackTrend: {
-        type: "line",
-        data: {
-          series: [
-            {
-              name: "Feedback Received",
-              data: mergedData.feedback_trend?.counts || Array(7).fill(0),
-            },
-          ],
-          categories:
-            mergedData.feedback_trend?.dates ||
-            Array.from({ length: 7 }, (_, i) =>
-              format(subDays(new Date(), 6 - i), "EEE")
-            ),
-          colors: ["#0EA5A4"],
-        },
-      },
-      teamPerformance: {
-        type: "bar",
-        data: {
-          series:
-            mergedData.team_performance?.map(
-              (staff) => staff.resolved_issues
-            ) || Array(5).fill(0),
-          categories: mergedData.team_performance?.map(
-            (staff) => staff.name
-          ) || ["Alex", "Jamie", "Taylor", "Morgan", "Casey"],
-          colors: ["#0EA5A4", "#FB923C", "#10B981", "#8B5CF6", "#EC4899"],
-        },
-      },
-      resolutionTrend: {
-        type: "area",
-        data: {
-          series: [
-            {
-              name: "Resolution Time (hours)",
-              data: mergedData.resolution_trend?.hours || Array(7).fill(24),
-            },
-          ],
-          categories:
-            mergedData.resolution_trend?.dates ||
-            Array.from({ length: 7 }, (_, i) =>
-              format(subDays(new Date(), 6 - i), "EEE")
-            ),
-          colors: ["#8B5CF6"],
-        },
-      },
-      satisfactionTrend: {
-        type: "line",
-        data: {
-          series: [
-            {
-              name: "Satisfaction Score",
-              data: mergedData.satisfaction_trend?.scores || Array(7).fill(85),
-            },
-          ],
-          categories:
-            mergedData.satisfaction_trend?.dates ||
-            Array.from({ length: 7 }, (_, i) =>
-              format(subDays(new Date(), 6 - i), "EEE")
-            ),
-          colors: ["#EC4899"],
-        },
-      },
-    };
-  };
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="?(.+)"?/);
+        if (filenameMatch && filenameMatch[1]) {
+          filename = filenameMatch[1];
+        }
+      }
 
-  // Get metric value with formatting
-  const getMetricValue = (metricId) => {
-    const data = reportsData?.processedData?.summary?.current || {};
-    const trend = reportsData?.processedData?.summary?.trends?.[metricId];
+      const blob = new Blob([response.data], {
+        type: response.headers["content-type"] || "application/octet-stream",
+      });
 
-    let value = data[metricId] || 0;
+      saveAs(blob, filename);
 
-    // Format the value
-    if (metricId.includes("time")) {
-      return `${value}h`;
-    } else if (
-      metricId.includes("percentage") ||
-      metricId.includes("score") ||
-      metricId.includes("compliance")
-    ) {
-      return `${value}%`;
-    } else {
-      return value.toLocaleString();
+      toast.success("Report downloaded successfully!");
+    } catch (error) {
+      console.error("Download error:", error);
+      toast.error("Failed to download report");
     }
   };
 
-  // Get metric trend indicator
-  const getMetricTrend = (metricId) => {
-    const trend = reportsData?.processedData?.summary?.trends?.[metricId];
-    if (!trend) return null;
+  // Prepare chart data
+  const prepareChartData = () => {
+    if (!analyticsData) {
+      return {
+        issuesByStatus: {
+          type: "pie",
+          data: { series: [], labels: [], colors: [] },
+        },
+        issuesByPriority: {
+          type: "bar",
+          data: { series: [], categories: [], colors: [] },
+        },
+        teamPerformance: {
+          type: "bar",
+          data: { series: [], categories: [], colors: [] },
+        },
+        resolutionTrend: {
+          type: "area",
+          data: { series: [], categories: [], colors: [] },
+        },
+        satisfactionTrend: {
+          type: "line",
+          data: { series: [], categories: [], colors: [] },
+        },
+      };
+    }
+
+    const data = analyticsData;
+
+    // Issues by Status chart
+    const issuesByStatus = {
+      type: "pie",
+      data: {
+        series: data.issues_by_status?.map((item) => item.count) || [],
+        labels:
+          data.issues_by_status?.map((item) =>
+            item.status.replace("_", " ").toUpperCase()
+          ) || [],
+        colors: ["#EF4444", "#F59E0B", "#10B981", "#0EA5A4", "#8B5CF6"],
+      },
+    };
+
+    // Issues by Priority chart
+    const issuesByPriority = {
+      type: "bar",
+      data: {
+        series: data.issues_by_priority?.map((item) => item.count) || [],
+        categories:
+          data.issues_by_priority?.map((item) => item.priority.toUpperCase()) ||
+          [],
+        colors: ["#10B981", "#F59E0B", "#EF4444", "#DC2626"],
+      },
+    };
+
+    // Team Performance chart
+    const teamPerformanceData = data.team_performance || [];
+    const teamPerformance = {
+      type: "bar",
+      data: {
+        series: [
+          {
+            name: "Total Assigned",
+            data: teamPerformanceData.map(
+              (member) => member.total_assigned || 0
+            ),
+          },
+          {
+            name: "Resolved",
+            data: teamPerformanceData.map((member) => member.resolved || 0),
+          },
+        ],
+        categories: teamPerformanceData.map(
+          (member) => member.name || "Unknown"
+        ),
+        colors: ["#0EA5A4", "#FB923C"],
+      },
+    };
+
+    // Daily trend chart
+    const dailyTrend = data.trends?.daily || [];
+    const resolutionTrend = {
+      type: "area",
+      data: {
+        series: [
+          {
+            name: "Daily Issues",
+            data: dailyTrend.map((day) => day.issues || 0),
+          },
+        ],
+        categories: dailyTrend.map((day) => day.day_name || "Day"),
+        colors: ["#8B5CF6"],
+      },
+    };
+
+    // Satisfaction trend
+    const satisfactionTrend = {
+      type: "line",
+      data: {
+        series: [
+          {
+            name: "Satisfaction Score",
+            data: dailyTrend.map((day) => day.feedback_avg || 0),
+          },
+        ],
+        categories: dailyTrend.map((day) => day.day_name || "Day"),
+        colors: ["#EC4899"],
+      },
+    };
 
     return {
-      value: trend.change,
-      direction: trend.direction,
-      isPositive:
-        trend.direction === "up"
-          ? metricId.includes("time") || metricId.includes("response")
-            ? false
-            : true
-          : metricId.includes("time") || metricId.includes("response")
-          ? true
-          : false,
+      issuesByStatus,
+      issuesByPriority,
+      teamPerformance,
+      resolutionTrend,
+      satisfactionTrend,
     };
   };
 
-  // Get period display text
+  // Get metric value
+ 
+  const getMetricValue = (metricName) => {
+    if (!analyticsData?.summary) return { value: 0, formatted: "0" };
+
+    let rawValue = analyticsData.summary[metricName];
+
+    // Handle cases where backend returns string like "24.5h" or "92.3%"
+    if (typeof rawValue === "string") {
+      rawValue = parseFloat(rawValue.replace(/[^0-9.]/g, ""));
+    }
+
+    if (rawValue === undefined || rawValue === null || isNaN(rawValue)) {
+      rawValue = 0;
+    }
+
+    let formatted = rawValue.toLocaleString();
+
+    if (metricName.includes("time") || metricName.includes("resolution")) {
+      formatted = `${rawValue.toFixed(1)}h`;
+    } else if (
+      metricName.includes("percentage") ||
+      metricName.includes("compliance") ||
+      metricName.includes("satisfaction")
+    ) {
+      formatted = `${rawValue.toFixed(1)}%`;
+    }
+
+    return { value: rawValue, formatted };
+  };
+
+  // Get period display
   const getPeriodDisplay = () => {
-    const period = reportsData?.processedData?.period;
-    if (period?.formatted) {
-      return `${period.formatted.start} - ${period.formatted.end} (${period.formatted.duration} days)`;
+    if (analyticsData?.period_display) {
+      return analyticsData.period_display;
     }
     return `${format(parseISO(startDate), "MMM dd, yyyy")} - ${format(
       parseISO(endDate),
@@ -732,7 +691,8 @@ export default function ReportsPage() {
     let interval;
     if (autoRefresh) {
       interval = setInterval(() => {
-        refetch();
+        refetchAnalytics();
+        refetchMetrics();
         toast.custom(
           <div className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg shadow-lg">
             <RefreshCw className="w-4 h-4 animate-spin" />
@@ -740,34 +700,108 @@ export default function ReportsPage() {
           </div>,
           { duration: 2000 }
         );
-      }, 60000); // Every minute
+      }, 60000); // Refresh every minute
     }
     return () => clearInterval(interval);
-  }, [autoRefresh, refetch]);
+  }, [autoRefresh, refetchAnalytics, refetchMetrics]);
 
-  // Scroll animations
+  // Load generated reports
   useEffect(() => {
-    const handleScroll = () => {
-      const header = headerRef.current;
-      if (header) {
-        if (window.scrollY > 100) {
-          header.classList.add("shadow-lg", "bg-white/95", "backdrop-blur-sm");
-        } else {
-          header.classList.remove(
-            "shadow-lg",
-            "bg-white/95",
-            "backdrop-blur-sm"
-          );
-        }
-      }
-    };
+    if (reportsList?.data?.results) {
+      setGeneratedReports(reportsList.data.results);
+    } else if (reportsList?.data) {
+      setGeneratedReports(reportsList.data);
+    }
+  }, [reportsList]);
 
-    window.addEventListener("scroll", handleScroll);
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
+  // Poll active report
+  useEffect(() => {
+    if (reportId) {
+      pollReportStatus(reportId);
+    }
+  }, [reportId, pollReportStatus]);
 
   const chartData = prepareChartData();
   const periodDisplay = getPeriodDisplay();
+
+  // Summary metrics cards
+  const summaryMetrics = [
+    {
+      id: "total_issues",
+      title: "Total Issues",
+      value: getMetricValue("total_issues").formatted,
+      description: "Issues reported in selected period",
+      icon: <AlertCircle size={20} />,
+      color: "teal",
+      trend: analyticsData?.summary?.total_issues > 0,
+    },
+    {
+      id: "resolved_issues",
+      title: "Resolved Issues",
+      value: getMetricValue("resolved_issues").formatted,
+      description: "Successfully closed issues",
+      icon: <CheckCircle size={20} />,
+      color: "green",
+      trend: true,
+    },
+    {
+      id: "open_issues",
+      title: "Open Issues",
+      value: getMetricValue("open_issues").formatted,
+      description: "Currently open issues",
+      icon: <AlertTriangle size={20} />,
+      color: "red",
+      trend: false,
+    },
+    {
+      id: "avg_resolution_time",
+      title: "Avg. Resolution Time",
+      value: getMetricValue("avg_resolution_time").formatted,
+      description: "Average time to resolve issues",
+      icon: <Clock size={20} />,
+      color: "blue",
+      trend: false,
+    },
+    {
+      id: "sla_compliance",
+      title: "SLA Compliance",
+      value: getMetricValue("sla_compliance").formatted,
+      description: "Service Level Agreement compliance rate",
+      icon: <Target size={20} />,
+      color: "purple",
+      trend: true,
+    },
+    {
+      id: "total_feedback",
+      title: "Total Feedback",
+      value: getMetricValue("total_feedback").formatted,
+      description: "Feedback submissions received",
+      icon: <MessageSquare size={20} />,
+      color: "orange",
+      trend: true,
+    },
+    {
+      id: "avg_satisfaction",
+      title: "Avg. Satisfaction",
+      value: getMetricValue("avg_satisfaction").formatted,
+      description: "Average client satisfaction rating",
+      icon: <Star size={20} />,
+      color: "pink",
+      trend: true,
+    },
+    {
+      id: "active_users",
+      title: "Active Users",
+      value: getMetricValue("active_users").formatted,
+      description: "Users active in the system",
+      icon: <UsersIcon size={20} />,
+      color: "indigo",
+      trend: true,
+    },
+  ];
+
+  // Check if data is empty
+  const isEmptyData = !analyticsData || Object.keys(analyticsData).length === 0;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-teal-50/30">
@@ -840,25 +874,45 @@ export default function ReportsPage() {
                 <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-2xl border border-gray-200 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
                   <div className="p-2">
                     <div className="px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Export Format
+                      Quick Export
                     </div>
-                    {["excel", "csv", "json", "pdf"].map((format) => (
+                    {["excel", "csv", "json"].map((format) => (
                       <button
                         key={format}
-                        onClick={() =>
-                          format === "pdf"
-                            ? generatePDFReport()
-                            : handleExport(format)
-                        }
+                        onClick={() => handleQuickExport(format)}
                         className="w-full flex items-center justify-between px-3 py-2.5 text-sm hover:bg-gray-50 rounded-lg transition-colors"
+                        disabled={analyticsLoading}
                       >
                         <div className="flex items-center gap-3">
                           <div className="p-1.5 bg-gray-100 rounded-lg">
-                            <DownloadIcon className="w-4 h-4 text-gray-600" />
+                            <Download className="w-4 h-4 text-gray-600" />
                           </div>
                           <span className="capitalize">{format} Export</span>
                         </div>
                         <span className="text-xs text-gray-400">.{format}</span>
+                      </button>
+                    ))}
+                    <div className="px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wider mt-2">
+                      Generate Report
+                    </div>
+                    {["pdf", "excel", "csv"].map((format) => (
+                      <button
+                        key={`gen-${format}`}
+                        onClick={() => generateReport(format)}
+                        className="w-full flex items-center justify-between px-3 py-2.5 text-sm hover:bg-gray-50 rounded-lg transition-colors"
+                        disabled={generating}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="p-1.5 bg-teal-100 rounded-lg">
+                            <FileText className="w-4 h-4 text-teal-600" />
+                          </div>
+                          <span className="capitalize">
+                            Generate {format.toUpperCase()}
+                          </span>
+                        </div>
+                        {generating && format === reportFormat && (
+                          <Loader2 className="w-4 h-4 animate-spin text-teal-600" />
+                        )}
                       </button>
                     ))}
                   </div>
@@ -882,315 +936,414 @@ export default function ReportsPage() {
       </motion.div>
 
       <div className="container mx-auto px-6 py-8">
-        {/* Main Content */}
-        <div className="space-y-8">
-          {/* Report Type Selection */}
+        {/* Error State */}
+        {analyticsError && (
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden"
+            className="mb-6"
           >
-            <div className="p-6">
-              <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
-                <div>
-                  <h2 className="text-xl font-semibold text-gray-900 mb-2">
-                    Report Type
-                  </h2>
-                  <p className="text-gray-600 ">
-                    Select the type of report you want to generate
+            <div className="bg-red-50 border border-red-200 rounded-xl p-6">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-6 h-6 text-red-500 mt-0.5" />
+                <div className="flex-1">
+                  <h3 className="font-semibold text-red-800">
+                    Failed to Load Analytics
+                  </h3>
+                  <p className="text-red-700 mt-1">
+                    {analyticsError.response?.data?.detail ||
+                      analyticsError.message}
                   </p>
-                </div>
-
-                <div className="flex flex-wrap gap-3">
-                  {reportTypes.map((type) => (
-                    <motion.button
-                      key={type.value}
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={() => setReportType(type.value)}
-                      className={`flex items-center gap-3 px-4 py-3 rounded-xl border transition-all ${
-                        reportType === type.value
-                          ? `bg-${type.color}-50 border-${type.color}-200 text-${type.color}-700`
-                          : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
-                      }`}
-                    >
-                      <div
-                        className={`p-2 rounded-lg ${
-                          reportType === type.value
-                            ? `bg-${type.color}-100`
-                            : "bg-gray-100"
-                        }`}
-                      >
-                        {type.icon}
-                      </div>
-                      <div className="text-left">
-                        <div className="font-medium">{type.label}</div>
-                        <div className="text-xs opacity-75">
-                          {type.description}
-                        </div>
-                      </div>
-                    </motion.button>
-                  ))}
+                  <button
+                    onClick={() => refetchAnalytics()}
+                    className="mt-3 px-4 py-2 bg-red-100 text-red-700 rounded-lg font-medium hover:bg-red-200 transition-colors"
+                  >
+                    Retry
+                  </button>
                 </div>
               </div>
             </div>
           </motion.div>
+        )}
 
-          {/* Date Range & Filters */}
+        {/* Empty State */}
+        {isEmptyData && !analyticsLoading && !analyticsError && (
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-2xl border border-gray-200 shadow-sm p-12 text-center"
           >
-            <div className="p-6">
-              <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-6">
-                <div>
-                  <h2 className="text-xl font-semibold text-gray-900 mb-2">
-                    Date Range
-                  </h2>
-                  <p className="text-gray-600">
-                    Select the time period for your analysis
-                  </p>
-                </div>
+            <div className="max-w-md mx-auto">
+              <div className="w-24 h-24 bg-teal-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                <Database className="w-12 h-12 text-teal-600" />
+              </div>
+              <h3 className="text-xl font-semibold text-gray-900 mb-3">
+                No Data Available
+              </h3>
+              <p className="text-gray-600 mb-6">
+                There's no analytics data available for the selected period. Try
+                adjusting your date range or check back later when data has been
+                collected.
+              </p>
+              <button
+                onClick={() => {
+                  setStartDate(format(subDays(new Date(), 30), "yyyy-MM-dd"));
+                  setEndDate(format(new Date(), "yyyy-MM-dd"));
+                  setDateRange("month");
+                }}
+                className="px-6 py-3 bg-teal-600 text-white rounded-lg font-medium hover:bg-teal-700 transition-colors"
+              >
+                Load Last 30 Days
+              </button>
+            </div>
+          </motion.div>
+        )}
 
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-lg">
-                    <Calendar className="w-5 h-5 text-gray-500" />
-                    <span className="font-medium text-gray-700">
-                      {periodDisplay}
-                    </span>
+        {/* Main Content */}
+        {!isEmptyData && (
+          <div className="space-y-8">
+            {/* Report Type Selection */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden"
+            >
+              <div className="p-6">
+                <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
+                  <div>
+                    <h2 className="text-xl font-semibold text-gray-900 mb-2">
+                      Report Type
+                    </h2>
+                    <p className="text-gray-600">
+                      Select the type of report you want to generate
+                    </p>
                   </div>
 
-                  <button
-                    onClick={() => refetch()}
-                    disabled={isFetching}
-                    className="p-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors disabled:opacity-50"
-                  >
-                    <RefreshCw
-                      className={`w-5 h-5 text-gray-600 ${
-                        isFetching ? "animate-spin" : ""
+                  <div className="flex flex-wrap gap-3">
+                    {reportTypes.map((type) => (
+                      <motion.button
+                        key={type.value}
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => setReportType(type.value)}
+                        className={`flex items-center gap-3 px-4 py-3 rounded-xl border transition-all ${
+                          reportType === type.value
+                            ? `bg-${type.color}-50 border-${type.color}-200 text-${type.color}-700`
+                            : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
+                        }`}
+                      >
+                        <div
+                          className={`p-2 rounded-lg ${
+                            reportType === type.value
+                              ? `bg-${type.color}-100`
+                              : "bg-gray-100"
+                          }`}
+                        >
+                          {type.icon}
+                        </div>
+                        <div className="text-left">
+                          <div className="font-medium">{type.label}</div>
+                          <div className="text-xs opacity-75">
+                            {type.description}
+                          </div>
+                        </div>
+                      </motion.button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Date Range & Filters */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden"
+            >
+              <div className="p-6">
+                <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-6">
+                  <div>
+                    <h2 className="text-xl font-semibold text-gray-900 mb-2">
+                      Date Range
+                    </h2>
+                    <p className="text-gray-600">
+                      Select the time period for your analysis
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-lg">
+                      <Calendar className="w-5 h-5 text-gray-500" />
+                      <span className="font-medium text-gray-700">
+                        {periodDisplay}
+                      </span>
+                    </div>
+
+                    <button
+                      onClick={() => refetchAnalytics()}
+                      disabled={analyticsFetching}
+                      className="p-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors disabled:opacity-50"
+                    >
+                      <RefreshCw
+                        className={`w-5 h-5 text-gray-600 ${
+                          analyticsFetching ? "animate-spin" : ""
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Date Presets */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
+                  {datePresets.map((preset) => (
+                    <motion.button
+                      key={preset.value}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => handleDatePreset(preset.value)}
+                      className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl border transition-all ${
+                        dateRange === preset.value
+                          ? "bg-teal-600 border-teal-600 text-white shadow-lg"
+                          : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
                       }`}
-                    />
-                  </button>
+                    >
+                      {preset.icon}
+                      <span className="font-medium">{preset.label}</span>
+                    </motion.button>
+                  ))}
                 </div>
-              </div>
 
-              {/* Date Presets */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
-                {datePresets.map((preset) => (
-                  <motion.button
-                    key={preset.value}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => handleDatePreset(preset.value)}
-                    className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl border transition-all ${
-                      dateRange === preset.value
-                        ? "bg-teal-600 border-teal-600 text-white shadow-lg"
-                        : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
-                    }`}
-                  >
-                    {preset.icon}
-                    <span className="font-medium">{preset.label}</span>
-                  </motion.button>
-                ))}
-              </div>
-
-              {/* Custom Date Range */}
-              <AnimatePresence>
-                {dateRange === "custom" && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: "auto", opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    className="overflow-hidden"
-                  >
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-50 rounded-xl">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Start Date
-                        </label>
-                        <input
-                          type="date"
-                          value={startDate}
-                          onChange={(e) => setStartDate(e.target.value)}
-                          className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
-                          max={endDate}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          End Date
-                        </label>
-                        <input
-                          type="date"
-                          value={endDate}
-                          onChange={(e) => setEndDate(e.target.value)}
-                          className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
-                          min={startDate}
-                          max={format(new Date(), "yyyy-MM-dd")}
-                        />
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              {/* Advanced Filters Toggle */}
-              <div className="mt-6 pt-6 border-t border-gray-200">
-                <button
-                  onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-                  className="flex items-center justify-between w-full p-4 bg-gray-50 hover:bg-gray-100 rounded-xl transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <Filter className="w-5 h-5 text-gray-500" />
-                    <div className="text-left">
-                      <div className="font-medium text-gray-900">
-                        Advanced Filters
-                      </div>
-                      <div className="text-sm text-gray-600">
-                        Apply additional filters to your report
-                      </div>
-                    </div>
-                  </div>
-                  <ChevronDown
-                    className={`w-5 h-5 text-gray-500 transition-transform ${
-                      showAdvancedFilters ? "rotate-180" : ""
-                    }`}
-                  />
-                </button>
-
+                {/* Custom Date Range */}
                 <AnimatePresence>
-                  {showAdvancedFilters && (
+                  {dateRange === "custom" && (
                     <motion.div
                       initial={{ height: 0, opacity: 0 }}
                       animate={{ height: "auto", opacity: 1 }}
                       exit={{ height: 0, opacity: 0 }}
                       className="overflow-hidden"
                     >
-                      <div className="mt-4 p-6 bg-gray-50 rounded-xl">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-3">
-                              Priority Level
-                            </label>
-                            <div className="space-y-2">
-                              {["low", "medium", "high", "critical"].map(
-                                (priority) => (
-                                  <label
-                                    key={priority}
-                                    className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-50"
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      className="rounded text-teal-600"
-                                    />
-                                    <span className="capitalize font-medium">
-                                      {priority}
-                                    </span>
-                                  </label>
-                                )
-                              )}
-                            </div>
-                          </div>
-
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-3">
-                              Issue Status
-                            </label>
-                            <div className="space-y-2">
-                              {[
-                                "open",
-                                "in_progress",
-                                "resolved",
-                                "closed",
-                              ].map((status) => (
-                                <label
-                                  key={status}
-                                  className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-50"
-                                >
-                                  <input
-                                    type="checkbox"
-                                    className="rounded text-teal-600"
-                                  />
-                                  <span className="capitalize font-medium">
-                                    {status.replace("_", " ")}
-                                  </span>
-                                </label>
-                              ))}
-                            </div>
-                          </div>
-
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-3">
-                              Additional Options
-                            </label>
-                            <div className="space-y-3">
-                              <label className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
-                                <span className="font-medium">
-                                  Include Attachments
-                                </span>
-                                <input type="checkbox" className="toggle" />
-                              </label>
-                              <label className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
-                                <span className="font-medium">
-                                  Real-time Updates
-                                </span>
-                                <input
-                                  type="checkbox"
-                                  checked={realTimeUpdates}
-                                  onChange={(e) =>
-                                    setRealTimeUpdates(e.target.checked)
-                                  }
-                                  className="toggle"
-                                />
-                              </label>
-                              <label className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
-                                <span className="font-medium">
-                                  Compare with Previous Period
-                                </span>
-                                <input type="checkbox" className="toggle" />
-                              </label>
-                            </div>
-                          </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-50 rounded-xl">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Start Date
+                          </label>
+                          <input
+                            type="date"
+                            value={startDate}
+                            onChange={(e) => setStartDate(e.target.value)}
+                            className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                            max={endDate}
+                          />
                         </div>
-
-                        <div className="mt-6 flex justify-end gap-3">
-                          <button className="px-6 py-2.5 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50">
-                            Clear Filters
-                          </button>
-                          <button className="px-6 py-2.5 bg-teal-600 text-white rounded-lg font-medium hover:bg-teal-700">
-                            Apply Filters
-                          </button>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            End Date
+                          </label>
+                          <input
+                            type="date"
+                            value={endDate}
+                            onChange={(e) => setEndDate(e.target.value)}
+                            className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                            min={startDate}
+                            max={format(new Date(), "yyyy-MM-dd")}
+                          />
                         </div>
                       </div>
                     </motion.div>
                   )}
                 </AnimatePresence>
+
+                {/* Advanced Filters Toggle */}
+                <div className="mt-6 pt-6 border-t border-gray-200">
+                  <button
+                    onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                    className="flex items-center justify-between w-full p-4 bg-gray-50 hover:bg-gray-100 rounded-xl transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Filter className="w-5 h-5 text-gray-500" />
+                      <div className="text-left">
+                        <div className="font-medium text-gray-900">
+                          Advanced Filters
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          Apply additional filters to your report
+                        </div>
+                      </div>
+                    </div>
+                    <ChevronDown
+                      className={`w-5 h-5 text-gray-500 transition-transform ${
+                        showAdvancedFilters ? "rotate-180" : ""
+                      }`}
+                    />
+                  </button>
+
+                  <AnimatePresence>
+                    {showAdvancedFilters && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        className="overflow-hidden"
+                      >
+                        <div className="mt-4 p-6 bg-gray-50 rounded-xl">
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-3">
+                                Priority Level
+                              </label>
+                              <div className="space-y-2">
+                                {["low", "medium", "high", "critical"].map(
+                                  (priority) => (
+                                    <label
+                                      key={priority}
+                                      className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-50"
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={filters.priority.includes(
+                                          priority
+                                        )}
+                                        onChange={() =>
+                                          handleFilterChange(
+                                            "priority",
+                                            priority
+                                          )
+                                        }
+                                        className="rounded text-teal-600 focus:ring-teal-500"
+                                      />
+                                      <span className="capitalize font-medium">
+                                        {priority}
+                                      </span>
+                                    </label>
+                                  )
+                                )}
+                              </div>
+                            </div>
+
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-3">
+                                Issue Status
+                              </label>
+                              <div className="space-y-2">
+                                {[
+                                  "open",
+                                  "in_progress",
+                                  "resolved",
+                                  "closed",
+                                ].map((status) => (
+                                  <label
+                                    key={status}
+                                    className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-50"
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={filters.status.includes(status)}
+                                      onChange={() =>
+                                        handleFilterChange("status", status)
+                                      }
+                                      className="rounded text-teal-600 focus:ring-teal-500"
+                                    />
+                                    <span className="capitalize font-medium">
+                                      {status.replace("_", " ")}
+                                    </span>
+                                  </label>
+                                ))}
+                              </div>
+                            </div>
+
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-3">
+                                Additional Options
+                              </label>
+                              <div className="space-y-3">
+                                <label className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
+                                  <span className="font-medium">
+                                    Include Attachments
+                                  </span>
+                                  <input
+                                    type="checkbox"
+                                    checked={filters.includeAttachments}
+                                    onChange={(e) =>
+                                      handleFilterChange(
+                                        "includeAttachments",
+                                        e.target.checked
+                                      )
+                                    }
+                                    className="rounded text-teal-600 focus:ring-teal-500"
+                                  />
+                                </label>
+                                <label className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
+                                  <span className="font-medium">
+                                    Real-time Updates
+                                  </span>
+                                  <input
+                                    type="checkbox"
+                                    checked={realTimeUpdates}
+                                    onChange={(e) =>
+                                      setRealTimeUpdates(e.target.checked)
+                                    }
+                                    className="rounded text-teal-600 focus:ring-teal-500"
+                                  />
+                                </label>
+                                <label className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
+                                  <span className="font-medium">
+                                    Compare with Previous Period
+                                  </span>
+                                  <input
+                                    type="checkbox"
+                                    checked={filters.comparePeriod}
+                                    onChange={(e) =>
+                                      handleFilterChange(
+                                        "comparePeriod",
+                                        e.target.checked
+                                      )
+                                    }
+                                    className="rounded text-teal-600 focus:ring-teal-500"
+                                  />
+                                </label>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="mt-6 flex justify-end gap-3">
+                            <button
+                              onClick={clearFilters}
+                              className="px-6 py-2.5 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50"
+                            >
+                              Clear Filters
+                            </button>
+                            <button
+                              onClick={applyFilters}
+                              className="px-6 py-2.5 bg-teal-600 text-white rounded-lg font-medium hover:bg-teal-700"
+                            >
+                              Apply Filters
+                            </button>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
               </div>
-            </div>
-          </motion.div>
+            </motion.div>
 
-          {/* Key Metrics Dashboard */}
-          <motion.div
-            ref={chartsRef}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.2 }}
-          >
-            <div className="mb-6">
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                Key Performance Indicators
-              </h2>
-              <p className="text-gray-600">Live metrics from your database</p>
-            </div>
+            {/* Key Metrics Dashboard */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.2 }}
+            >
+              <div className="mb-6">
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                  Key Performance Indicators
+                </h2>
+                <p className="text-gray-600">Live metrics from your database</p>
+              </div>
 
-            {/* Metrics Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-              {metricCards.slice(0, 4).map((metric, index) => {
-                const trend = getMetricTrend(metric.id);
-
-                return (
+              {/* Metrics Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                {summaryMetrics.slice(0, 4).map((metric, index) => (
                   <motion.div
                     key={metric.id}
                     initial={{ opacity: 0, y: 20 }}
@@ -1205,27 +1358,17 @@ export default function ReportsPage() {
                         </div>
                       </div>
 
-                      {trend && (
-                        <div
-                          className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
-                            trend.isPositive
-                              ? "bg-green-100 text-green-800"
-                              : "bg-red-100 text-red-800"
-                          }`}
-                        >
-                          {trend.isPositive ? (
-                            <ArrowUpRight size={12} />
-                          ) : (
-                            <ArrowDownRight size={12} />
-                          )}
-                          {Math.abs(trend.value).toFixed(1)}%
+                      {realTimeData && (
+                        <div className="flex items-center gap-1">
+                          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                          <span className="text-xs text-gray-500">Live</span>
                         </div>
                       )}
                     </div>
 
                     <div className="mb-2">
                       <div className="text-3xl font-bold text-gray-900">
-                        {getMetricValue(metric.id)}
+                        {metric.value}
                       </div>
                       <div className="text-sm text-gray-600 mt-1">
                         {metric.title}
@@ -1235,340 +1378,425 @@ export default function ReportsPage() {
                     <div className="text-xs text-gray-500">
                       {metric.description}
                     </div>
+                  </motion.div>
+                ))}
+              </div>
 
-                    {realTimeData && (
-                      <div className="mt-4 flex items-center gap-2 text-xs">
-                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                        <span className="text-gray-500">Live</span>
+              {/* Additional Metrics */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                {summaryMetrics.slice(4).map((metric, index) => (
+                  <motion.div
+                    key={metric.id}
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: (index + 4) * 0.1 }}
+                    className="bg-gradient-to-br from-white to-gray-50 rounded-2xl border border-gray-200 p-6"
+                  >
+                    <div className="flex items-center gap-3 mb-4">
+                      <div
+                        className={`p-2.5 rounded-lg bg-${metric.color}-100`}
+                      >
+                        <div className={`text-${metric.color}-600`}>
+                          {metric.icon}
+                        </div>
+                      </div>
+                      <div className="font-medium text-gray-900">
+                        {metric.title}
+                      </div>
+                    </div>
+
+                    <div className="text-2xl font-bold text-gray-900 mb-1">
+                      {metric.value}
+                    </div>
+
+                    <div className="text-sm text-gray-600">
+                      {metric.description}
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            </motion.div>
+
+            {/* Charts Section */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.3 }}
+              className="space-y-6"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">
+                    Visual Analytics
+                  </h2>
+                  <p className="text-gray-600">
+                    Interactive charts with real-time data
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => {
+                      refetchAnalytics();
+                      toast.success("Charts refreshed");
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                  >
+                    <RefreshCw size={16} />
+                    <span>Refresh Charts</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Charts Grid */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Issues by Status */}
+                <motion.div
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden"
+                >
+                  <div className="p-6">
+                    <div className="flex items-center justify-between mb-6">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-teal-100 rounded-lg">
+                          <ChartPie className="w-5 h-5 text-teal-600" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-gray-900">
+                            Issues by Status
+                          </h3>
+                          <p className="text-sm text-gray-600">
+                            Distribution of issues across different statuses
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-gray-500">
+                        <Database size={14} />
+                        <span>Live Database</span>
+                      </div>
+                    </div>
+                    {chartData.issuesByStatus.data.labels.length > 0 ? (
+                      <ChartCard
+                        title=""
+                        type="pie"
+                        data={chartData.issuesByStatus.data}
+                        isLoading={analyticsLoading}
+                        height={300}
+                        showHeader={false}
+                      />
+                    ) : (
+                      <div className="h-[300px] flex items-center justify-center text-gray-500">
+                        No status data available
                       </div>
                     )}
-                  </motion.div>
-                );
-              })}
-            </div>
-
-            {/* Additional Metrics */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              {metricCards.slice(4).map((metric, index) => (
-                <motion.div
-                  key={metric.id}
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: (index + 4) * 0.1 }}
-                  className="bg-gradient-to-br from-white to-gray-50 rounded-2xl border border-gray-200 p-6"
-                >
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className={`p-2.5 rounded-lg bg-${metric.color}-100`}>
-                      <div className={`text-${metric.color}-600`}>
-                        {metric.icon}
-                      </div>
-                    </div>
-                    <div className="font-medium text-gray-900">
-                      {metric.title}
-                    </div>
-                  </div>
-
-                  <div className="text-2xl font-bold text-gray-900 mb-1">
-                    {getMetricValue(metric.id)}
-                  </div>
-
-                  <div className="text-sm text-gray-600">
-                    {metric.description}
                   </div>
                 </motion.div>
-              ))}
-            </div>
-          </motion.div>
 
-          {/* Charts Section */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.3 }}
-            className="space-y-6"
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900">
-                  Visual Analytics
-                </h2>
-                <p className="text-gray-600">
-                  Interactive charts with real-time data
-                </p>
+                {/* Issues by Priority */}
+                <motion.div
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden"
+                >
+                  <div className="p-6">
+                    <div className="flex items-center justify-between mb-6">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-orange-100 rounded-lg">
+                          <BarChart className="w-5 h-5 text-orange-600" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-gray-900">
+                            Issues by Priority
+                          </h3>
+                          <p className="text-sm text-gray-600">
+                            Issue distribution across priority levels
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        Updated: {format(new Date(), "hh:mm a")}
+                      </div>
+                    </div>
+                    {chartData.issuesByPriority.data.categories.length > 0 ? (
+                      <ChartCard
+                        title=""
+                        type="bar"
+                        data={chartData.issuesByPriority.data}
+                        isLoading={analyticsLoading}
+                        height={300}
+                        showHeader={false}
+                      />
+                    ) : (
+                      <div className="h-[300px] flex items-center justify-center text-gray-500">
+                        No priority data available
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+
+                {/* Team Performance */}
+                <motion.div
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.1 }}
+                  className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden"
+                >
+                  <div className="p-6">
+                    <div className="flex items-center justify-between mb-6">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-blue-100 rounded-lg">
+                          <UsersIcon className="w-5 h-5 text-blue-600" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-gray-900">
+                            Team Performance
+                          </h3>
+                          <p className="text-sm text-gray-600">
+                            Issues resolved by team members
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                        <span className="text-sm text-gray-500">Real-time</span>
+                      </div>
+                    </div>
+                    {chartData.teamPerformance.data.categories.length > 0 ? (
+                      <ChartCard
+                        title=""
+                        type="bar"
+                        data={chartData.teamPerformance.data}
+                        isLoading={analyticsLoading}
+                        height={300}
+                        showHeader={false}
+                      />
+                    ) : (
+                      <div className="h-[300px] flex items-center justify-center text-gray-500">
+                        No team performance data available
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+
+                {/* Daily Trend */}
+                <motion.div
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.1 }}
+                  className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden"
+                >
+                  <div className="p-6">
+                    <div className="flex items-center justify-between mb-6">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-purple-100 rounded-lg">
+                          <TrendingUp className="w-5 h-5 text-purple-600" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-gray-900">
+                            Daily Trend
+                          </h3>
+                          <p className="text-sm text-gray-600">
+                            Issues and feedback over time
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setReportType("team_performance")}
+                        className="text-sm text-teal-600 hover:text-teal-700 font-medium"
+                      >
+                        View Details →
+                      </button>
+                    </div>
+                    {chartData.resolutionTrend.data.categories.length > 0 ? (
+                      <ChartCard
+                        title=""
+                        type="area"
+                        data={chartData.resolutionTrend.data}
+                        isLoading={analyticsLoading}
+                        height={300}
+                        showHeader={false}
+                      />
+                    ) : (
+                      <div className="h-[300px] flex items-center justify-center text-gray-500">
+                        No trend data available
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
               </div>
+            </motion.div>
 
-              <div className="flex items-center gap-3">
-                <button className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
-                  <Settings size={16} />
-                  <span>Chart Settings</span>
-                </button>
-                <button className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
-                  <DownloadIcon size={16} />
-                  <span>Export Charts</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Charts Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Issues by Status */}
-              <motion.div
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden"
-              >
-                <div className="p-6">
-                  <div className="flex items-center justify-between mb-6">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-teal-100 rounded-lg">
-                        <ChartPie className="w-5 h-5 text-teal-600" />
-                      </div>
-                      <div>
-                        <h3 className="font-semibold text-gray-900">
-                          Issues by Status
-                        </h3>
-                        <p className="text-sm text-gray-600">
-                          Distribution of issues across different statuses
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm text-gray-500">
-                      <Database size={14} />
-                      <span>Live Database</span>
-                    </div>
-                  </div>
-                  <ChartCard
-                    title=""
-                    type="pie"
-                    data={chartData.issuesByStatus.data}
-                    isLoading={isLoading}
-                    height={300}
-                    showHeader={false}
-                  />
-                </div>
-              </motion.div>
-
-              {/* Issues by Priority */}
-              <motion.div
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden"
-              >
-                <div className="p-6">
-                  <div className="flex items-center justify-between mb-6">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-orange-100 rounded-lg">
-                        <BarChart className="w-5 h-5 text-orange-600" />
-                      </div>
-                      <div>
-                        <h3 className="font-semibold text-gray-900">
-                          Issues by Priority
-                        </h3>
-                        <p className="text-sm text-gray-600">
-                          Issue distribution across priority levels
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-sm text-gray-500">
-                      Updated just now
-                    </div>
-                  </div>
-                  <ChartCard
-                    title=""
-                    type="bar"
-                    data={chartData.issuesByPriority.data}
-                    isLoading={isLoading}
-                    height={300}
-                    showHeader={false}
-                  />
-                </div>
-              </motion.div>
-
-              {/* Feedback Trend */}
-              <motion.div
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.1 }}
-                className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden"
-              >
-                <div className="p-6">
-                  <div className="flex items-center justify-between mb-6">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-blue-100 rounded-lg">
-                        <ChartLine className="w-5 h-5 text-blue-600" />
-                      </div>
-                      <div>
-                        <h3 className="font-semibold text-gray-900">
-                          Feedback Trend (7 Days)
-                        </h3>
-                        <p className="text-sm text-gray-600">
-                          Daily feedback submissions over time
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                      <span className="text-sm text-gray-500">Real-time</span>
-                    </div>
-                  </div>
-                  <ChartCard
-                    title=""
-                    type="line"
-                    data={chartData.feedbackTrend.data}
-                    isLoading={isLoading}
-                    height={300}
-                    showHeader={false}
-                  />
-                </div>
-              </motion.div>
-
-              {/* Team Performance */}
-              <motion.div
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.1 }}
-                className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden"
-              >
-                <div className="p-6">
-                  <div className="flex items-center justify-between mb-6">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-purple-100 rounded-lg">
-                        <TrendingUp className="w-5 h-5 text-purple-600" />
-                      </div>
-                      <div>
-                        <h3 className="font-semibold text-gray-900">
-                          Team Performance
-                        </h3>
-                        <p className="text-sm text-gray-600">
-                          Issues resolved by team members
-                        </p>
-                      </div>
-                    </div>
-                    <button className="text-sm text-teal-600 hover:text-teal-700 font-medium">
-                      View Details →
-                    </button>
-                  </div>
-                  <ChartCard
-                    title=""
-                    type="bar"
-                    data={chartData.teamPerformance.data}
-                    isLoading={isLoading}
-                    height={300}
-                    showHeader={false}
-                  />
-                </div>
-              </motion.div>
-
-              {/* Additional Charts Row */}
+            {/* Generated Reports Section */}
+            {generatedReports.length > 0 && (
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="lg:col-span-2 grid grid-cols-1 lg:grid-cols-2 gap-6"
+                className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden"
               >
-                {/* Resolution Trend */}
-                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-                  <div className="p-6">
-                    <div className="flex items-center justify-between mb-6">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-indigo-100 rounded-lg">
-                          <Activity className="w-5 h-5 text-indigo-600" />
-                        </div>
-                        <div>
-                          <h3 className="font-semibold text-gray-900">
-                            Resolution Trend
-                          </h3>
-                          <p className="text-sm text-gray-600">
-                            Average resolution time over 7 days
-                          </p>
-                        </div>
-                      </div>
+                <div className="p-6">
+                  <div className="flex items-center justify-between mb-6">
+                    <div>
+                      <h2 className="text-xl font-semibold text-gray-900">
+                        Generated Reports
+                      </h2>
+                      <p className="text-gray-600">
+                        Your previously generated reports
+                      </p>
                     </div>
-                    <ChartCard
-                      title=""
-                      type="area"
-                      data={chartData.resolutionTrend.data}
-                      isLoading={isLoading}
-                      height={250}
-                      showHeader={false}
-                    />
+                    <button
+                      onClick={refetchReports}
+                      disabled={reportsLoading}
+                      className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg disabled:opacity-50"
+                    >
+                      <RefreshCw
+                        size={16}
+                        className={reportsLoading ? "animate-spin" : ""}
+                      />
+                      Refresh
+                    </button>
                   </div>
-                </div>
 
-                {/* Satisfaction Trend */}
-                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-                  <div className="p-6">
-                    <div className="flex items-center justify-between mb-6">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-pink-100 rounded-lg">
-                          <Award className="w-5 h-5 text-pink-600" />
-                        </div>
-                        <div>
-                          <h3 className="font-semibold text-gray-900">
-                            Satisfaction Trend
-                          </h3>
-                          <p className="text-sm text-gray-600">
-                            Client satisfaction score trend
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                    <ChartCard
-                      title=""
-                      type="line"
-                      data={chartData.satisfactionTrend.data}
-                      isLoading={isLoading}
-                      height={250}
-                      showHeader={false}
-                    />
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-gray-200">
+                          <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">
+                            Report Type
+                          </th>
+                          <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">
+                            Status
+                          </th>
+                          <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">
+                            Created
+                          </th>
+                          <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">
+                            Actions
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {generatedReports.slice(0, 5).map((report) => (
+                          <tr
+                            key={report.id}
+                            className="border-b border-gray-100 hover:bg-gray-50"
+                          >
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-3">
+                                <div className="p-2 bg-teal-100 rounded-lg">
+                                  {reportTypes.find(
+                                    (t) => t.value === report.type
+                                  )?.icon || <FileText size={16} />}
+                                </div>
+                                <div>
+                                  <div className="font-medium text-gray-900">
+                                    {report.type_display || report.type}
+                                  </div>
+                                  <div className="text-sm text-gray-500">
+                                    {report.format_display || report.format}
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="py-3 px-4">
+                              <span
+                                className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
+                                  report.status === "generated"
+                                    ? "bg-green-100 text-green-800"
+                                    : report.status === "pending" ||
+                                      report.status === "processing"
+                                    ? "bg-yellow-100 text-yellow-800"
+                                    : "bg-red-100 text-red-800"
+                                }`}
+                              >
+                                {report.status_display || report.status}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-sm text-gray-600">
+                              {format(
+                                new Date(report.created_at),
+                                "MMM dd, yyyy HH:mm"
+                              )}
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-2">
+                                {report.status === "generated" && (
+                                  <button
+                                    onClick={() =>
+                                      handleDownloadReportById(report.id)
+                                    }
+                                    className="px-3 py-1.5 bg-teal-600 text-white text-sm rounded-lg hover:bg-teal-700"
+                                  >
+                                    Download
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => {
+                                    // View report details
+                                    toast.info(
+                                      `Viewing ${report.type_display} report`
+                                    );
+                                  }}
+                                  className="px-3 py-1.5 border border-gray-300 text-gray-700 text-sm rounded-lg hover:bg-gray-50"
+                                >
+                                  View
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               </motion.div>
-            </div>
-          </motion.div>
+            )}
 
-          {/* Data Source & Update Status */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-gradient-to-r from-teal-50 to-blue-50 rounded-2xl border border-teal-200 p-6"
-          >
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-white rounded-xl shadow-sm">
-                  <Database className="w-6 h-6 text-teal-600" />
+            {/* Data Source & Update Status */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-gradient-to-r from-teal-50 to-blue-50 rounded-2xl border border-teal-200 p-6"
+            >
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 bg-white rounded-xl shadow-sm">
+                    <Database className="w-6 h-6 text-teal-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900">
+                      Live Database Connection
+                    </h3>
+                    <p className="text-sm text-gray-600">
+                      Connected to production database • Last updated:{" "}
+                      {format(new Date(), "hh:mm:ss a")}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-semibold text-gray-900">
-                    Live Database Connection
-                  </h3>
-                  <p className="text-sm text-gray-600">
-                    Connected to production database • Last updated:{" "}
-                    {format(new Date(), "hh:mm:ss a")}
-                  </p>
+
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 px-3 py-1.5 bg-white rounded-lg border border-teal-200">
+                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                    <span className="text-sm font-medium text-gray-700">
+                      Active
+                    </span>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      refetchAnalytics();
+                      refetchMetrics();
+                      toast.success("Data refreshed successfully");
+                    }}
+                    className="px-4 py-2 bg-teal-600 text-white rounded-lg font-medium hover:bg-teal-700"
+                  >
+                    Refresh Data
+                  </button>
                 </div>
               </div>
-
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-white rounded-lg border border-teal-200">
-                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                  <span className="text-sm font-medium text-gray-700">
-                    Active
-                  </span>
-                </div>
-
-                <button
-                  onClick={() => {
-                    refetch();
-                    toast.success("Database refreshed successfully");
-                  }}
-                  className="px-4 py-2 bg-teal-600 text-white rounded-lg font-medium hover:bg-teal-700"
-                >
-                  Refresh Data
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        </div>
+            </motion.div>
+          </div>
+        )}
       </div>
 
       {/* Footer */}
@@ -1602,7 +1830,7 @@ export default function ReportsPage() {
 
       {/* Loading Overlay */}
       <AnimatePresence>
-        {(isLoading || generating) && (
+        {(analyticsLoading || generating) && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -1621,7 +1849,7 @@ export default function ReportsPage() {
                 </h3>
                 <p className="text-gray-600 mb-6">
                   {generating
-                    ? "Your comprehensive PDF report is being generated. This may take a moment..."
+                    ? "Your report is being generated. This may take a moment..."
                     : "Fetching real-time data from your database..."}
                 </p>
 

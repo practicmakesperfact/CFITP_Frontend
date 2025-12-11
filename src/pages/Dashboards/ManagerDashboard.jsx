@@ -213,7 +213,7 @@ export default function ManagerDashboard() {
 
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <ChartCard title="Issue Status Overview" type="pie" data={pieData} />
+        <ChartCard title="Issue Status Overview" type="line" data={pieData} />
         <ChartCard title="Issues This Week" type="line" data={weeklyData()} />
       </div>
 
