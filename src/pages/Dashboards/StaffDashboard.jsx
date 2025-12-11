@@ -79,7 +79,9 @@ export default function StaffDashboard() {
     >
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold text-slate-800">Staff Dashboard</h1>
+          <h1 className="text-4xl font-bold text-slate-800">
+            Welcome back, {user?.first_name || "Staff"}!
+          </h1>
           <p className="text-slate-600 mt-2">
             Your assigned tasks and progress
           </p>

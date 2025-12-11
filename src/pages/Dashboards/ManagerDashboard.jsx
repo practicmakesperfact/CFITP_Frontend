@@ -143,7 +143,7 @@ export default function ManagerDashboard() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-4xl font-bold text-slate-800">
-            Manager Dashboard
+            Welcome back, {user?.first_name || "Manager"}!
           </h1>
           <p className="text-slate-600 mt-2">Team management and oversight</p>
         </div>
@@ -213,7 +213,7 @@ export default function ManagerDashboard() {
 
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <ChartCard title="Issue Status Overview" type="pie" data={pieData} />
+        <ChartCard title="Issue Status Overview" type="line" data={pieData} />
         <ChartCard title="Issues This Week" type="line" data={weeklyData()} />
       </div>
 
