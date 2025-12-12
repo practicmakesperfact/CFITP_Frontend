@@ -1,4 +1,4 @@
-import { User, Lock, Edit, Trash2 } from "lucide-react";
+import { User, Lock, Edit, Trash2, Paperclip, Download, Image as ImageIcon } from "lucide-react";
 import DOMPurify from "dompurify";
 import { useState } from "react";
 import Button from "../UI/Button.jsx";
@@ -12,8 +12,8 @@ function highlightMentions(text) {
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;");
   return escaped.replace(
-    /@([\w.-]+)/g,
-    '<span class="text-teal-600 font-medium">@$1</span>'
+    /@([\w.-]+@[\w.-]+\.\w+|[\w.-]+)/g,
+    '<span class="text-teal-600 font-medium hover:underline cursor-pointer">@$1</span>'
   );
 }
 
@@ -39,6 +39,8 @@ export default function CommentThread({
   const author = comment.author || {};
   const displayName =
     author.name ||
+    author.get_full_name?.() ||
+    `${author.first_name || ""} ${author.last_name || ""}`.trim() ||
     author.email ||
     comment.author_name ||
     comment.author_email ||
@@ -87,11 +89,22 @@ export default function CommentThread({
   const formatDate = (dateString) => {
     if (!dateString) return "";
     try {
-      return new Date(dateString).toLocaleString("en-US", {
+      const date = new Date(dateString);
+      const now = new Date();
+      const diffMs = now - date;
+      const diffMins = Math.floor(diffMs / 60000);
+      const diffHours = Math.floor(diffMs / 3600000);
+      const diffDays = Math.floor(diffMs / 86400000);
+
+      if (diffMins < 1) return "just now";
+      if (diffMins < 60) return `${diffMins}m ago`;
+      if (diffHours < 24) return `${diffHours}h ago`;
+      if (diffDays < 7) return `${diffDays}d ago`;
+
+      return date.toLocaleDateString("en-US", {
         month: "short",
         day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
+        year: date.getFullYear() !== now.getFullYear() ? "numeric" : undefined,
       });
     } catch (e) {
       return "Invalid date";
@@ -100,60 +113,69 @@ export default function CommentThread({
 
   return (
     <div
-      className={`flex gap-3 p-4 rounded-lg ${
-        isInternal ? "bg-yellow-50 border-l-4 border-yellow-400" : "bg-gray-50"
-      } ${isAuthor ? "border border-teal-100" : ""}`}
+      className={`flex gap-4 p-4 rounded-lg border ${
+        isInternal
+          ? "bg-yellow-50 border-yellow-200"
+          : "bg-white border-gray-200"
+      } ${isAuthor ? "border-teal-300 bg-teal-50/30" : ""}`}
     >
-      <div className="w-10 h-10 bg-teal-500 rounded-full flex items-center justify-center text-white font-bold flex-shrink-0">
-        {initials}
+      {/* Left: Profile Avatar */}
+      <div className="flex-shrink-0">
+        <div className="w-10 h-10 bg-teal-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
+          {initials}
+        </div>
       </div>
 
+      {/* Middle: Content */}
       <div className="flex-1 min-w-0">
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-start justify-between mb-2">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-medium text-gray-900">{displayName}</span>
+            <span className="font-semibold text-gray-900">{displayName}</span>
 
             {isAuthor && (
-              <span className="text-xs px-2 py-0.5 bg-teal-50 text-teal-700 rounded">
+              <span className="text-xs px-2 py-0.5 bg-teal-100 text-teal-700 rounded-full">
                 You
               </span>
             )}
 
-            <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-700 rounded">
-              {authorRole.charAt(0).toUpperCase() + authorRole.slice(1)}
+            <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full capitalize">
+              {authorRole}
             </span>
 
             {isInternal && (
-              <span className="flex items-center gap-1 text-xs text-yellow-700 bg-yellow-100 px-2 py-1 rounded">
-                <Lock size={10} /> Internal Note
+              <span className="flex items-center gap-1 text-xs text-yellow-700 bg-yellow-100 px-2 py-0.5 rounded-full">
+                <Lock size={10} /> Internal
               </span>
             )}
-          </div>
 
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-500">
+            <span className="text-xs text-gray-500">
               {formatDate(comment.created_at)}
             </span>
-
-            {isAuthor && !isEditing && (
-              <div className="flex gap-1">
-                <button
-                  onClick={() => setIsEditing(true)}
-                  className="text-gray-400 hover:text-teal-600 p-1"
-                  title="Edit comment"
-                >
-                  <Edit size={14} />
-                </button>
-                <button
-                  onClick={() => onDelete(comment.id)}
-                  className="text-gray-400 hover:text-red-600 p-1"
-                  title="Delete comment"
-                >
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            )}
           </div>
+
+          {/* Right: Edit/Delete buttons */}
+          {isAuthor && !isEditing && (
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setIsEditing(true)}
+                className="text-gray-400 hover:text-teal-600 p-1.5 rounded hover:bg-teal-50 transition"
+                title="Edit comment"
+              >
+                <Edit size={14} />
+              </button>
+              <button
+                onClick={() => {
+                  if (window.confirm("Are you sure you want to delete this comment?")) {
+                    onDelete(comment.id);
+                  }
+                }}
+                className="text-gray-400 hover:text-red-600 p-1.5 rounded hover:bg-red-50 transition"
+                title="Delete comment"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          )}
         </div>
 
         {isEditing ? (
@@ -162,7 +184,7 @@ export default function CommentThread({
               value={editContent}
               onChange={(e) => setEditContent(e.target.value)}
               className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-none"
-              rows={3}
+              rows={4}
             />
             <div className="flex gap-2">
               <Button
@@ -179,10 +201,30 @@ export default function CommentThread({
             </div>
           </div>
         ) : (
-          <div
-            className="prose prose-gray max-w-none text-gray-700 whitespace-pre-wrap"
-            dangerouslySetInnerHTML={{ __html: html }}
-          />
+          <>
+            <div
+              className="prose prose-gray max-w-none text-gray-700 whitespace-pre-wrap mb-2"
+              dangerouslySetInnerHTML={{ __html: html }}
+            />
+            {/* Comment attachments */}
+            {comment.attachments && comment.attachments.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-2">
+                {comment.attachments.map((att) => (
+                  <a
+                    key={att.id}
+                    href={att.file || att.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition"
+                  >
+                    <Paperclip size={14} className="text-gray-400" />
+                    <span className="text-sm text-gray-700">{att.filename || att.file?.split("/").pop()}</span>
+                    <Download size={12} className="text-gray-400" />
+                  </a>
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

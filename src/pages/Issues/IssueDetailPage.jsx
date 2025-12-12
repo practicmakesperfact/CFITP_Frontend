@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   ArrowLeft,
   Edit3,
@@ -15,6 +15,9 @@ import {
   Download,
   Globe,
   Tag,
+  X,
+  Send,
+  ImageIcon,
 } from "lucide-react";
 
 import { issuesApi } from "../../api/issuesApi.js";
@@ -31,6 +34,7 @@ import AssignModal from "../../components/Issues/AssignModal.jsx";
 import { useUIStore } from "../../app/store/uiStore.js";
 import { useAuth } from "../../app/hooks.js";
 import toast from "react-hot-toast";
+import ImageModal from "../../components/UI/ImageModal.jsx";
 
 export default function IssueDetailPage() {
   const { id } = useParams();
@@ -42,6 +46,9 @@ export default function IssueDetailPage() {
   const [editDesc, setEditDesc] = useState("");
   const [assignOpen, setAssignOpen] = useState(false);
   const [commentVisibility, setCommentVisibility] = useState("public");
+  const [selectedImage, setSelectedImage] = useState(null);
+  // Add state for selected files (around line 39)
+  const [selectedFiles, setSelectedFiles] = useState([]);
 
   const { userRole } = useUIStore();
   const { user: currentUser, isLoading: authLoading } = useAuth();
@@ -105,11 +112,6 @@ export default function IssueDetailPage() {
     enabled: !!id, // Only fetch if we have an issue ID
   });
 
-  // Sort comments by created_at DESC (newest first)
-  const sortedComments = [...comments].sort(
-    (a, b) => new Date(b.created_at) - new Date(a.created_at)
-  );
-
   // Fetch attachments
   const {
     data: attachments = [],
@@ -153,6 +155,80 @@ export default function IssueDetailPage() {
     },
     enabled: userRole === "manager", // Only fetch for managers
   });
+
+  // Fetch users for mentions
+  const { data: mentionableUsers = [] } = useQuery({
+    queryKey: ["mentionable-users", id],
+    queryFn: async () => {
+      try {
+        const response = await axiosClient.get("/users/");
+        const users = response.data.results || response.data || [];
+        // Return all users for mentions (clients can mention staff/managers, etc.)
+        return users;
+      } catch (error) {
+        console.error("Error fetching users for mentions:", error);
+        return [];
+      }
+    },
+    enabled: !!id,
+  });
+
+  // Sort comments: client comments first, then by date (newest first)
+  const sortedComments = useMemo(() => {
+    const clientComments = comments.filter(
+      (c) => c.author?.role === "client" || c.author_role === "client"
+    );
+    const otherComments = comments.filter(
+      (c) => c.author?.role !== "client" && c.author_role !== "client"
+    );
+    
+    const sortByDate = (a, b) => 
+      new Date(b.created_at) - new Date(a.created_at);
+    
+    return [
+      ...clientComments.sort(sortByDate),
+      ...otherComments.sort(sortByDate),
+    ];
+  }, [comments]);
+
+  // Handle comment submission with attachments
+  const handlePostComment = async (content, attachments = []) => {
+    // First upload attachments if any, then create comment with attachment IDs
+    let attachmentIds = [];
+    
+    if (attachments && attachments.length > 0) {
+      try {
+        const uploadPromises = attachments.map(async (file) => {
+          const response = await attachmentsApi.create(id, file, user?.id);
+          return response.data.id;
+        });
+        attachmentIds = await Promise.all(uploadPromises);
+      } catch (error) {
+        console.error("Error uploading attachments:", error);
+        toast.error("Failed to upload some attachments");
+      }
+    }
+    
+    return commentMutation.mutateAsync({
+      content,
+      visibility: commentVisibility,
+      attachments: attachmentIds,
+    });
+  };
+
+  // Filter mentionable users based on query
+  const getMentionableUsers = (query) => {
+    if (!query) return mentionableUsers.slice(0, 5);
+    const lowerQuery = query.toLowerCase();
+    return mentionableUsers
+      .filter(
+        (u) =>
+          u.email?.toLowerCase().includes(lowerQuery) ||
+          u.first_name?.toLowerCase().includes(lowerQuery) ||
+          u.last_name?.toLowerCase().includes(lowerQuery)
+      )
+      .slice(0, 5);
+  };
 
   // Helper functions
   const getUserInitials = (name) => {
@@ -218,7 +294,12 @@ export default function IssueDetailPage() {
      setUploading(true);
 
      // Use the corrected API
-     return await attachmentsApi.create(id, file, user?.id);
+     const response = await attachmentsApi.create(id, file, user?.id);
+     
+     // Remove from selected files after successful upload
+     setSelectedFiles(prev => prev.filter(f => f !== file && f.name !== file.name));
+     
+     return response;
    },
    onSuccess: () => {
      queryClient.invalidateQueries(["attachments", id]);
@@ -294,6 +375,7 @@ const commentMutation = useMutation({
       const response = await commentsApi.create(id, {
         content: commentData.content,
         visibility: commentData.visibility || "public",
+        attachments: commentData.attachments || [], // Pass attachments
       });
       
       console.log("DEBUG: Comment created successfully:", response.data);
@@ -303,8 +385,27 @@ const commentMutation = useMutation({
         status: error.response?.status,
         data: error.response?.data,
         message: error.message,
-        url: error.config?.url
+        url: error.config?.url,
+        requestData: {
+          content: commentData.content,
+          visibility: commentData.visibility,
+          attachments: commentData.attachments
+        }
       });
+      
+      // Show more detailed error message
+      if (error.response?.data) {
+        const errorData = error.response.data;
+        if (typeof errorData === 'string') {
+          throw new Error(errorData);
+        } else if (errorData.detail) {
+          throw new Error(errorData.detail);
+        } else if (errorData.non_field_errors) {
+          throw new Error(errorData.non_field_errors[0]);
+        } else {
+          throw new Error(JSON.stringify(errorData));
+        }
+      }
       throw error;
     }
   },
@@ -315,14 +416,18 @@ const commentMutation = useMutation({
   onError: (error) => {
     console.error("Comment error:", error);
     
+    const errorMessage = error.message || "Failed to post comment";
+    
     if (error.response?.status === 500) {
       toast.error("Server error. Check Django logs for details.");
     } else if (error.response?.status === 403) {
       toast.error("You don't have permission to comment on this issue");
     } else if (error.response?.status === 404) {
       toast.error("Issue not found");
+    } else if (error.response?.status === 400) {
+      toast.error(`Validation error: ${errorMessage}`);
     } else {
-      toast.error("Failed to post comment");
+      toast.error(errorMessage);
     }
   },
 });
@@ -351,14 +456,6 @@ const commentMutation = useMutation({
       toast.error("Failed to delete comment");
     },
   });
-
-  // Handle comment submission from CommentEditor
-  const handlePostComment = async (content) => {
-    return commentMutation.mutateAsync({
-      content,
-      visibility: commentVisibility,
-    });
-  };
 
   // Handle edit comment
   const handleEditComment = (commentId, newContent) => {
@@ -752,6 +849,8 @@ const commentMutation = useMutation({
                 visibility={commentVisibility}
                 onVisibilityChange={setCommentVisibility}
                 isSubmitting={commentMutation.isPending}
+                mentionedUsers={mentionableUsers}
+                onMentionSearch={getMentionableUsers}
               />
             </div>
           </div>
@@ -804,13 +903,17 @@ const commentMutation = useMutation({
           {/* Attachments card */}
           <div className="bg-white rounded-xl shadow-lg p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <Paperclip size={18} /> Attachments ({allAttachments.length})
+              <Paperclip size={18} /> Attachments ({allAttachments.length + selectedFiles.length})
             </h3>
 
             <FileUploader
               onUpload={(files) => {
                 if (files && files.length > 0) {
-                  handleFileUpload(files[0]);
+                  // Add to selected files
+                  const fileArray = Array.isArray(files) ? files : [files];
+                  setSelectedFiles(prev => [...prev, ...fileArray]);
+                  // Upload each file
+                  fileArray.forEach(file => handleFileUpload(file));
                 }
               }}
               isUploading={uploading || uploadMutation.isPending}
@@ -826,43 +929,95 @@ const commentMutation = useMutation({
             )}
 
             <div className="mt-4 space-y-2">
-              {allAttachments.length > 0 ? (
-                allAttachments.map((attachment, index) => (
-                  <div
-                    key={attachment.id || index}
-                    className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100"
-                  >
-                    <div className="flex items-center gap-3">
-                      <Paperclip size={16} className="text-gray-400" />
-                      <div>
-                        <p className="text-sm font-medium text-gray-900 truncate max-w-[180px]">
-                          {attachment.filename ||
-                            attachment.name ||
-                            attachment.file?.split("/").pop() ||
-                            "Unnamed file"}
-                        </p>
-                        {attachment.size && (
-                          <p className="text-xs text-gray-500">
-                            {formatFileSize(attachment.size)}
+              {/* Show selected files that are pending upload */}
+              {selectedFiles.length > 0 && (
+                <>
+                  {selectedFiles.map((file, index) => (
+                    <div
+                      key={`selected-${index}`}
+                      className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200"
+                    >
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <Paperclip size={16} className="text-blue-400 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900 truncate">
+                            {file.name || file.filename || "Unnamed file"}
                           </p>
+                          <p className="text-xs text-gray-500">
+                            {file.size ? formatFileSize(file.size) : "Uploading..."}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
+
+              {/* Show uploaded attachments */}
+              {allAttachments.length > 0 ? (
+                allAttachments.map((attachment, index) => {
+                  const fileUrl = attachment.url || attachment.file;
+                  const isImage = attachment.mime_type?.startsWith('image/') || 
+                                 /\.(jpg|jpeg|png|gif|webp)$/i.test(fileUrl || '');
+                  
+                  return (
+                    <div
+                      key={attachment.id || index}
+                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100"
+                    >
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <Paperclip size={16} className="text-gray-400 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900 truncate">
+                            {attachment.filename ||
+                              attachment.name ||
+                              attachment.file?.split("/").pop() ||
+                              "Unnamed file"}
+                          </p>
+                          {attachment.size && (
+                            <p className="text-xs text-gray-500">
+                              {formatFileSize(attachment.size)}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {isImage && fileUrl && (
+                          <button
+                            onClick={() => {
+                              // Construct full URL if relative
+                              let fullUrl = fileUrl;
+                              if (!fileUrl.startsWith('http')) {
+                                const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+                                // Remove /api/v1 if present, then add media path
+                                const mediaBase = baseUrl.replace('/api/v1', '');
+                                fullUrl = `${mediaBase}${fileUrl.startsWith('/') ? '' : '/'}${fileUrl}`;
+                              }
+                              setSelectedImage(fullUrl);
+                            }}
+                            className="text-teal-600 hover:text-teal-700 p-1"
+                            title="View image"
+                          >
+                            <ImageIcon size={16} />
+                          </button>
+                        )}
+                        {fileUrl && (
+                          <a
+                            href={fileUrl.startsWith('http') ? fileUrl : `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}${fileUrl}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-teal-600 hover:text-teal-700 p-1"
+                            title="Download"
+                          >
+                            <Download size={16} />
+                          </a>
                         )}
                       </div>
                     </div>
-
-                    {(attachment.url || attachment.file) && (
-                      <a
-                        href={attachment.url || attachment.file}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-teal-600 hover:text-teal-700 p-1"
-                        title="Download"
-                      >
-                        <Download size={16} />
-                      </a>
-                    )}
-                  </div>
-                ))
-              ) : (
+                  );
+                })
+              ) : selectedFiles.length === 0 && (
                 <div className="text-center py-4">
                   <Paperclip className="mx-auto h-8 w-8 text-gray-400 mb-2" />
                   <p className="text-gray-500">No attachments yet</p>
@@ -874,29 +1029,63 @@ const commentMutation = useMutation({
             </div>
           </div>
 
-          {/* Metadata card */}
+          {/* Details panel (GitHub-style) - FIXED POSITION */}
           <div className="bg-white rounded-xl shadow-lg p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">
               Details
             </h3>
 
-            <div className="space-y-3">
+            <div className="space-y-4">
               <div>
-                <p className="text-sm text-gray-500">Issue ID</p>
-                <p className="font-medium text-gray-900">#{issue.id}</p>
+                <p className="text-xs text-gray-500 mb-1">Issue ID</p>
+                <p className="font-medium text-gray-900">#{issue.id.slice(0, 8)}</p>
               </div>
 
               <div>
-                <p className="text-sm text-gray-500">Created</p>
-                <p className="font-medium text-gray-900">
+                <p className="text-xs text-gray-500 mb-1">Status</p>
+                <span
+                  className={`inline-block px-2 py-1 rounded text-xs font-medium ${
+                    issue.status === "open"
+                      ? "bg-red-100 text-red-700"
+                      : issue.status === "in-progress"
+                      ? "bg-amber-100 text-amber-700"
+                      : issue.status === "resolved"
+                      ? "bg-emerald-100 text-emerald-700"
+                      : "bg-gray-100 text-gray-700"
+                  }`}
+                >
+                  {issue.status?.replace("-", " ").toUpperCase()}
+                </span>
+              </div>
+
+              <div>
+                <p className="text-xs text-gray-500 mb-1">Priority</p>
+                <span
+                  className={`inline-block px-2 py-1 rounded text-xs font-medium ${
+                    issue.priority === "low"
+                      ? "bg-blue-100 text-blue-700"
+                      : issue.priority === "medium"
+                      ? "bg-orange-100 text-orange-700"
+                      : issue.priority === "high"
+                      ? "bg-red-100 text-red-700"
+                      : "bg-purple-100 text-purple-700"
+                  }`}
+                >
+                  {issue.priority?.toUpperCase()}
+                </span>
+              </div>
+
+              <div>
+                <p className="text-xs text-gray-500 mb-1">Created</p>
+                <p className="text-sm font-medium text-gray-900">
                   {formatDate(issue.created_at)}
                 </p>
               </div>
 
               {issue.updated_at && (
                 <div>
-                  <p className="text-sm text-gray-500">Last Updated</p>
-                  <p className="font-medium text-gray-900">
+                  <p className="text-xs text-gray-500 mb-1">Last Updated</p>
+                  <p className="text-sm font-medium text-gray-900">
                     {formatDate(issue.updated_at)}
                   </p>
                 </div>
@@ -904,12 +1093,19 @@ const commentMutation = useMutation({
 
               {issue.due_date && (
                 <div>
-                  <p className="text-sm text-gray-500">Due Date</p>
-                  <p className="font-medium text-gray-900">
+                  <p className="text-xs text-gray-500 mb-1">Due Date</p>
+                  <p className="text-sm font-medium text-gray-900">
                     {formatDate(issue.due_date)}
                   </p>
                 </div>
               )}
+
+              <div>
+                <p className="text-xs text-gray-500 mb-1">Reporter</p>
+                <p className="text-sm font-medium text-gray-900">
+                  {creatorDisplayName}
+                </p>
+              </div>
             </div>
           </div>
         </div>
@@ -922,6 +1118,14 @@ const commentMutation = useMutation({
           staffUsers={staffUsers}
           onClose={() => setAssignOpen(false)}
           onAssign={(assigneeId) => assignMutation.mutate(assigneeId)}
+        />
+      )}
+
+      {/* Image Modal */}
+      {selectedImage && (
+        <ImageModal
+          imageUrl={selectedImage}
+          onClose={() => setSelectedImage(null)}
         />
       )}
     </motion.div>
