@@ -330,11 +330,31 @@ export default function IssueDetailPage() {
     mutationFn: (status) => issuesApi.transition(id, status),
     onSuccess: () => {
       queryClient.invalidateQueries(["issues", id]);
+      queryClient.invalidateQueries(["issues-all"]);
       toast.success("Status updated successfully!");
     },
     onError: (error) => {
-      console.error("Status update error:", error);
-      toast.error("Failed to update status");
+      console.error("Status update error details:", error);
+      
+      // Improved error message from backend
+      let errorMsg = "Failed to update status";
+      
+      if (error.response?.data) {
+        const data = error.response.data;
+        if (data.detail) {
+          errorMsg = data.detail;
+        } else if (data.allowed) {
+          errorMsg = `Invalid status. Allowed values: ${data.allowed.join(", ")}`;
+        } else if (typeof data === "string") {
+          errorMsg = data;
+        } else {
+          errorMsg = JSON.stringify(data);
+        }
+      } else if (error.message) {
+        errorMsg = error.message;
+      }
+      
+      toast.error(errorMsg);
     },
   });
 
@@ -364,13 +384,8 @@ export default function IssueDetailPage() {
       toast.error("Failed to update issue");
     },
   });
-
-
 const commentMutation = useMutation({
-  mutationFn: async (commentData) => {
-    console.log("DEBUG: Posting comment to issue:", id);
-    console.log("DEBUG: Comment data:", commentData);
-    
+  mutationFn: async (commentData) => {  
     try {
       const response = await commentsApi.create(id, {
         content: commentData.content,
@@ -378,7 +393,6 @@ const commentMutation = useMutation({
         attachments: commentData.attachments || [], // Pass attachments
       });
       
-      console.log("DEBUG: Comment created successfully:", response.data);
       return response;
     } catch (error) {
       console.error("DEBUG: Full error details:", {
@@ -726,7 +740,7 @@ const commentMutation = useMutation({
                     className={`px-3 py-1 rounded-full text-sm font-medium ${
                       issue.status === "open"
                         ? "bg-red-100 text-red-700"
-                        : issue.status === "in-progress"
+                        : issue.status === "in_progress" || issue.status === "in-progress"
                         ? "bg-amber-100 text-amber-700"
                         : issue.status === "resolved"
                         ? "bg-emerald-100 text-emerald-700"
@@ -736,7 +750,7 @@ const commentMutation = useMutation({
                     }`}
                   >
                     {issue.status
-                      ? issue.status.replace("-", " ").toUpperCase()
+                      ? issue.status.replace(/_/g, " ").replace("-", " ").toUpperCase()
                       : "UNKNOWN"}
                   </span>
 
@@ -765,7 +779,7 @@ const commentMutation = useMutation({
               {/* Status icon */}
               <div className="text-gray-400">
                 {issue.status === "open" && <AlertCircle size={24} />}
-                {issue.status === "in-progress" && <Clock size={24} />}
+                {(issue.status === "in_progress" || issue.status === "in-progress") && <Clock size={24} />}
                 {issue.status === "resolved" && <CheckCircle size={24} />}
                 {issue.status === "closed" && (
                   <CheckCircle size={24} className="text-gray-500" />
@@ -907,18 +921,14 @@ const commentMutation = useMutation({
             </h3>
 
             <FileUploader
+              multiple
               onUpload={(files) => {
-                if (files && files.length > 0) {
-                  // Add to selected files
-                  const fileArray = Array.isArray(files) ? files : [files];
-                  setSelectedFiles(prev => [...prev, ...fileArray]);
-                  // Upload each file
-                  fileArray.forEach(file => handleFileUpload(file));
-                }
+                if (!files?.length) return;
+                const arr = Array.isArray(files) ? files : [files];
+                setSelectedFiles((prev) => [...prev, ...arr]);
+                arr.forEach((file) => handleFileUpload(file));
               }}
-              isUploading={uploading || uploadMutation.isPending}
-              accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
-              maxSize={10 * 1024 * 1024}
+              
             />
 
             {uploadMutation.isPending && (
@@ -956,10 +966,10 @@ const commentMutation = useMutation({
               {/* Show uploaded attachments */}
               {allAttachments.length > 0 ? (
                 allAttachments.map((attachment, index) => {
-                  const fileUrl = attachment.url || attachment.file;
-                  const isImage = attachment.mime_type?.startsWith('image/') || 
-                                 /\.(jpg|jpeg|png|gif|webp)$/i.test(fileUrl || '');
-                  
+                  const fileUrl = attachment.file_url || attachment.url || attachment.file;
+                  const isImage = attachment.mime_type?.startsWith('image/')
+                    || /\.(jpg|jpeg|png|gif|webp)$/i.test(fileUrl || '');
+                                    
                   return (
                     <div
                       key={attachment.id || index}
@@ -1047,14 +1057,14 @@ const commentMutation = useMutation({
                   className={`inline-block px-2 py-1 rounded text-xs font-medium ${
                     issue.status === "open"
                       ? "bg-red-100 text-red-700"
-                      : issue.status === "in-progress"
+                      : issue.status === "in_progress" || issue.status === "in-progress"
                       ? "bg-amber-100 text-amber-700"
                       : issue.status === "resolved"
                       ? "bg-emerald-100 text-emerald-700"
                       : "bg-gray-100 text-gray-700"
                   }`}
                 >
-                  {issue.status?.replace("-", " ").toUpperCase()}
+                  {issue.status?.replace(/_/g, " ").replace("-", " ").toUpperCase()}
                 </span>
               </div>
 

@@ -274,17 +274,17 @@ const ChartCard = ({
 }) => {
   const [chartOptions, setChartOptions] = useState({
     chart: {
-      type: type,
+      type: type === "pie" ? "donut" : type,
       toolbar: {
         show: true,
         tools: {
           download: true,
           selection: false,
-          zoom: true,
-          zoomin: true,
-          zoomout: true,
+          zoom: type === "pie" || type === "donut" ? false : true,
+          zoomin: type === "pie" || type === "donut" ? false : true,
+          zoomout: type === "pie" || type === "donut" ? false : true,
           pan: false,
-          reset: true,
+          reset: type === "pie" || type === "donut" ? false : true,
         },
       },
       animations: {
@@ -338,6 +338,26 @@ const ChartCard = ({
         fontSize: "12px",
         fontFamily: "Inter, sans-serif",
         colors: ["#fff"],
+        fontWeight: 600,
+      },
+      formatter: function (val, opts) {
+        if (type === "pie" || type === "donut") {
+          // Get the total of all series values
+          const seriesTotals = opts.w.globals.seriesTotals || [];
+          const total = seriesTotals.reduce((a, b) => Number(a) + Number(b), 0);
+          
+          // Ensure val is a number
+          const value = Number(val);
+          
+          // Calculate percentage (out of 100%)
+          if (total > 0) {
+            const percentage = Math.round((value / total) * 100);
+            // Only show percentage if slice is large enough (> 5%)
+            return percentage > 5 ? `${percentage}%` : "";
+          }
+          return "";
+        }
+        return val;
       },
     },
     stroke: {
@@ -411,52 +431,66 @@ const ChartCard = ({
   const [chartSeries, setChartSeries] = useState([]);
 
   useEffect(() => {
-    if (data?.series && Array.isArray(data.series)) {
-      // If series is an array of objects (multi-series)
-      if (typeof data.series[0] === "object" && data.series[0].name !== undefined) {
+    // Handle pie/donut charts differently - they need a simple array
+    if (type === "pie" || type === "donut") {
+      if (data?.series && Array.isArray(data.series)) {
+        // For pie charts, series should be a simple array of numbers
         setChartSeries(data.series);
       } else {
-        // If series is a single array of values
+        setChartSeries([0, 0, 0]);
+      }
+    } else {
+      // Handle line/bar/area charts
+      if (data?.series && Array.isArray(data.series)) {
+        // If series is an array of objects (multi-series)
+        if (typeof data.series[0] === "object" && data.series[0].name !== undefined) {
+          setChartSeries(data.series);
+        } else {
+          // If series is a single array of values
+          setChartSeries([
+            {
+              name: title || "Data",
+              data: data.series,
+            },
+          ]);
+        }
+      } else if (data?.series && !Array.isArray(data.series)) {
+        // If series is a single value array
         setChartSeries([
           {
             name: title || "Data",
-            data: data.series,
+            data: [data.series],
+          },
+        ]);
+      } else {
+        // Default empty series
+        setChartSeries([
+          {
+            name: "No Data",
+            data: [0],
           },
         ]);
       }
-    } else if (data?.series && !Array.isArray(data.series)) {
-      // If series is a single value array
-      setChartSeries([
-        {
-          name: title || "Data",
-          data: [data.series],
-        },
-      ]);
-    } else {
-      // Default empty series
-      setChartSeries([
-        {
-          name: "No Data",
-          data: [0],
-        },
-      ]);
     }
 
     // Update chart options with data
     setChartOptions((prev) => ({
       ...prev,
       colors: data?.colors || prev.colors,
+      labels: type === "pie" || type === "donut" ? (data?.labels || []) : prev.labels,
       xaxis: {
         ...prev.xaxis,
         categories: data?.categories || prev.xaxis.categories,
       },
     }));
-  }, [data, title]);
+  }, [data, title, type]);
 
   // Check if we have valid data
-  const hasValidData = chartSeries.some((series) => 
-    Array.isArray(series.data) && series.data.some((value) => value > 0)
-  );
+  const hasValidData = type === "pie" || type === "donut"
+    ? Array.isArray(chartSeries) && chartSeries.some((value) => value > 0)
+    : chartSeries.some((series) => 
+        Array.isArray(series.data) && series.data.some((value) => value > 0)
+      );
 
   if (isLoading) {
     return (
@@ -546,8 +580,8 @@ const ChartCard = ({
       <div style={{ height: `${height}px` }}>
         <ReactApexChart
           options={chartOptions}
-          series={chartSeries}
-          type={type}
+          series={type === "pie" || type === "donut" ? chartSeries : chartSeries}
+          type={type === "pie" ? "donut" : type}
           height={height}
         />
       </div>

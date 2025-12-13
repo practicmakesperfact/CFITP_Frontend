@@ -324,12 +324,12 @@ export default function ClientDashboard() {
                     className={`px-5 py-2 rounded-full text-sm font-bold ${
                       issue.status === "open"
                         ? "bg-red-100 text-red-700"
-                        : issue.status === "in-progress"
+                        : issue.status === "in-progress" || issue.status === "in_progress"
                         ? "bg-amber-100 text-amber-700"
                         : "bg-emerald-100 text-emerald-700"
                     }`}
                   >
-                    {issue.status.replace("-", " ").toUpperCase()}
+                    {issue.status?.replace(/_/g, " ").replace("-", " ").toUpperCase()}
                   </span>
                 </div>
               </div>

@@ -1,4 +1,3 @@
-
 import axiosClient from "./axiosClient";
 
 export const issuesApi = {
@@ -28,6 +27,7 @@ export const issuesApi = {
   update: (id, data) => axiosClient.patch(`/issues/${id}/`, data),
   delete: (id) => axiosClient.delete(`/issues/${id}/`),
   assign: (id, data) => axiosClient.post(`/issues/${id}/assign/`, data),
+
   transition: (id, status) =>
-    axiosClient.post(`/issues/${id}/transition/`, { status }),
+    axiosClient.post(`/issues/${id}/transition/`, { new_status: status }),
 };

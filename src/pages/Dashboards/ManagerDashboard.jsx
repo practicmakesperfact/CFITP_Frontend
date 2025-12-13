@@ -101,7 +101,7 @@ export default function ManagerDashboard() {
 
   const open = filteredIssues.filter((i) => i.status === "open").length;
   const inProgress = filteredIssues.filter(
-    (i) => i.status === "in-progress"
+    (i) => i.status === "in-progress" || i.status === "in_progress"
   ).length;
   const resolved = filteredIssues.filter((i) =>
     ["resolved", "closed"].includes(i.status)
@@ -318,7 +318,7 @@ export default function ManagerDashboard() {
                     className={`px-4 py-1.5 rounded-full text-sm font-bold ${
                       issue.status === "open"
                         ? "bg-red-100 text-red-700"
-                        : issue.status === "in-progress"
+                        : issue.status === "in-progress" || issue.status === "in_progress"
                         ? "bg-amber-100 text-amber-700"
                         : "bg-emerald-100 text-emerald-700"
                     }`}

@@ -11,9 +11,13 @@ import {
 export default function IssueCard({ issue }) {
   const navigate = useNavigate();
 
+  // Helper to normalize status (handle both "in_progress" and "in-progress")
+  const normalizeStatus = (status) => status?.replace("_", "-");
+  
   const statusStyles = {
     open: "bg-red-100 text-red-700",
     "in-progress": "bg-amber-100 text-amber-700",
+    "in_progress": "bg-amber-100 text-amber-700",
     resolved: "bg-emerald-100 text-emerald-700",
     closed: "bg-gray-200 text-gray-700",
   };
@@ -43,10 +47,10 @@ export default function IssueCard({ issue }) {
       <div className="flex items-center gap-3 mb-4">
         <span
           className={`text-xs px-3 py-1 rounded-full font-medium ${
-            statusStyles[issue.status]
+            statusStyles[issue.status] || statusStyles[normalizeStatus(issue.status)]
           }`}
         >
-          {issue.status.replace("-", " ").toUpperCase()}
+          {issue.status?.replace(/_/g, " ").replace("-", " ").toUpperCase()}
         </span>
 
         <span
@@ -74,7 +78,7 @@ export default function IssueCard({ issue }) {
         {/* STATUS ICON */}
         <div className="flex items-center gap-2 text-slate-500 text-sm">
           {issue.status === "open" && <AlertCircle size={18} />}
-          {issue.status === "in-progress" && <Clock size={18} />}
+          {(issue.status === "in-progress" || issue.status === "in_progress") && <Clock size={18} />}
           {issue.status === "resolved" && <CheckCircle size={18} />}
           <ArrowRight size={18} />
         </div>

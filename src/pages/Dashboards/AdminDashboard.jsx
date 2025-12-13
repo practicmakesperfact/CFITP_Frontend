@@ -67,7 +67,7 @@ export default function AdminDashboard() {
 
   const openCount = issues.filter((i) => i.status === "open").length;
   const inProgressCount = issues.filter(
-    (i) => i.status === "in-progress"
+    (i) => i.status === "in-progress" || i.status === "in_progress"
   ).length;
   const resolvedCount = issues.filter((i) =>
     ["resolved", "closed"].includes(i.status)

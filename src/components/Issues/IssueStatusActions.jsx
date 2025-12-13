@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 
 export default function IssueStatusActions({ issue, onChange }) {
@@ -15,11 +14,13 @@ export default function IssueStatusActions({ issue, onChange }) {
     }
   };
 
-  // Render button(s) depending on current issue.status
-  if (issue.status === "open") {
+  // Normalize status for comparison (handle both "in_progress" and "in-progress")
+  const normalizedStatus = issue.status?.replace("-", "_");
+  
+  if (normalizedStatus === "open") {
     return (
       <button
-        onClick={() => handle("in-progress")}
+        onClick={() => handle("in_progress")} 
         disabled={loading}
         className="px-4 py-2 rounded-xl bg-[#0EA5A4] text-white"
       >
@@ -28,7 +29,8 @@ export default function IssueStatusActions({ issue, onChange }) {
     );
   }
 
-  if (issue.status === "in-progress") {
+  if (normalizedStatus === "in_progress") {
+    
     return (
       <div className="flex gap-2">
         <button
@@ -49,7 +51,7 @@ export default function IssueStatusActions({ issue, onChange }) {
     );
   }
 
-  // resolved / closed — allow reopen
+  
   return (
     <button
       onClick={() => handle("open")}
