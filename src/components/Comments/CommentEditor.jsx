@@ -1,190 +1,92 @@
-import { useState, useRef, useEffect } from "react";
-import { Send, Lock, Globe, Paperclip, X, Image as ImageIcon } from "lucide-react";
-import Button from "../UI/Button.jsx";
-import axiosClient from "../../api/axiosClient.js";
-import { attachmentsApi } from "../../api/attachmentsApi.js";
 
-export default function CommentEditor({
-  issueId,
-  onPost,
-  visibility = "public",
-  onVisibilityChange,
-  isSubmitting = false,
-  onMentionSearch,
-  mentionedUsers = [],
-}) {
-  const [comment, setComment] = useState("");
-  const [showMentions, setShowMentions] = useState(false);
-  const [mentionQuery, setMentionQuery] = useState("");
-  const [mentionPosition, setMentionPosition] = useState({ top: 0, left: 0 });
-  const textareaRef = useRef(null);
+import React, { useState } from 'react';
+import { Paperclip, X } from 'lucide-react';
 
-  // Handle @mention detection
-  useEffect(() => {
-    const handleInput = (e) => {
-      const text = e.target.value;
-      const cursorPos = e.target.selectionStart;
-      const textBeforeCursor = text.substring(0, cursorPos);
-      const match = textBeforeCursor.match(/@(\w*)$/);
-
-      if (match) {
-        setMentionQuery(match[1]);
-        const rect = e.target.getBoundingClientRect();
-        setMentionPosition({
-          top: rect.top + rect.height,
-          left: rect.left,
-        });
-        setShowMentions(true);
-      } else {
-        setShowMentions(false);
-      }
-    };
-
-    const textarea = textareaRef.current;
-    if (textarea) {
-      textarea.addEventListener("input", handleInput);
-      textarea.addEventListener("keydown", (e) => {
-        if (showMentions && e.key === "Enter" && !e.shiftKey) {
-          e.preventDefault();
-          if (mentionedUsers.length > 0) {
-            insertMention(mentionedUsers[0]);
-          }
-        }
-      });
-      return () => {
-        textarea.removeEventListener("input", handleInput);
-      };
-    }
-  }, [showMentions, mentionedUsers]);
-
-  const insertMention = (user) => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-
-    const text = textarea.value;
-    const cursorPos = textarea.selectionStart;
-    const textBeforeCursor = text.substring(0, cursorPos);
-    const match = textBeforeCursor.match(/@(\w*)$/);
+export default function CommentEditor({ onPost, issueId, visibility, onVisibilityChange, isSubmitting }) {
+  const [content, setContent] = useState('');
+  const [files, setFiles] = useState([]);
+  
+  const handleFileSelect = (event) => {
+    const selected = Array.from(event.target.files);
+    // Validate file size (10MB max)
+    const validFiles = selected.filter(file => file.size <= 10 * 1024 * 1024);
     
-    if (match) {
-      const start = cursorPos - match[0].length;
-      const newText = 
-        text.substring(0, start) + 
-        `@${user.email} ` + 
-        text.substring(cursorPos);
-      setComment(newText);
-      setShowMentions(false);
-      textarea.focus();
-      textarea.setSelectionRange(start + user.email.length + 2, start + user.email.length + 2);
+    if (validFiles.length !== selected.length) {
+      alert("Some files exceed the 10MB limit");
     }
+    
+    setFiles(prev => [...prev, ...validFiles]);
   };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!comment.trim()) return;
-
+  
+  const removeFile = (index) => {
+    setFiles(prev => prev.filter((_, i) => i !== index));
+  };
+  
+  const handleSubmit = async () => {
+    if (!content.trim() && files.length === 0) return;
+    
     try {
-      await onPost(comment, []); // No attachments from comment editor
-      setComment("");
+      await onPost(content, files);
+      setContent('');
+      setFiles([]);
     } catch (error) {
       console.error("Failed to post comment:", error);
     }
   };
-
+  
   return (
-    <form onSubmit={handleSubmit} className="space-y-3">
-      <div className="relative">
-        <textarea
-          ref={textareaRef}
-          value={comment}
-          onChange={(e) => setComment(e.target.value)}
-          placeholder="Add a comment... Use @ to mention someone"
-          className="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-none"
-          rows={4}
-          disabled={isSubmitting}
-        />
-
-        {/* Mention dropdown */}
-        {showMentions && mentionedUsers.length > 0 && (
-          <div
-            className="absolute z-50 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto"
-            style={{
-              top: `${mentionPosition.top}px`,
-              left: `${mentionPosition.left}px`,
-            }}
-          >
-            {mentionedUsers.map((user) => (
+    <div className="space-y-4">
+      {/* File preview area */}
+      {files.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-4">
+          {files.map((file, index) => (
+            <div key={index} className="flex items-center gap-2 bg-gray-50 px-3 py-2 rounded-lg">
+              <Paperclip size={14} />
+              <span className="text-sm truncate max-w-xs">{file.name}</span>
               <button
-                key={user.id}
-                type="button"
-                onClick={() => insertMention(user)}
-                className="w-full text-left px-4 py-2 hover:bg-teal-50 flex items-center gap-2"
+                onClick={() => removeFile(index)}
+                className="text-gray-500 hover:text-red-500"
               >
-                <div className="w-8 h-8 bg-teal-500 rounded-full flex items-center justify-center text-white text-xs font-bold">
-                  {user.email?.charAt(0).toUpperCase() || "U"}
-                </div>
-                <div>
-                  <p className="text-sm font-medium">{user.email}</p>
-                  <p className="text-xs text-gray-500">{user.role}</p>
-                </div>
+                <X size={14} />
               </button>
-            ))}
-          </div>
-        )}
-
-        {/* Visibility toggle */}
-        {onVisibilityChange && (
-          <div className="absolute top-2 right-2">
-            <button
-              type="button"
-              onClick={() =>
-                onVisibilityChange(
-                  visibility === "public" ? "internal" : "public"
-                )
-              }
-              className={`flex items-center gap-1 px-2 py-1 rounded text-xs ${
-                visibility === "internal"
-                  ? "bg-yellow-100 text-yellow-700 border border-yellow-300"
-                  : "bg-gray-100 text-gray-700 border border-gray-300"
-              }`}
-            >
-              {visibility === "internal" ? (
-                <>
-                  <Lock size={10} /> Internal
-                </>
-              ) : (
-                <>
-                  <Globe size={10} /> Public
-                </>
-              )}
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Attachments preview */}
-      {/* Removed attachments preview as attachments are now handled by the backend */}
-
-      <div className="flex justify-between items-center">
-        <div className="flex items-center gap-2">
-          {/* REMOVE the file input and attach button - attachments should only be uploaded via sidebar */}
-          <p className="text-xs text-gray-500">
-            {visibility === "internal"
-              ? "Internal note (staff/manager only)"
-              : "Public comment"}
-          </p>
+            </div>
+          ))}
         </div>
-
-        <Button
-          type="submit"
-          variant="primary"
-          disabled={!comment.trim() || isSubmitting}
-          className="flex items-center gap-2"
+      )}
+      
+      {/* Text area */}
+      <textarea
+        value={content}
+        onChange={(e) => setContent(e.target.value)}
+        placeholder="Add a comment or attach files..."
+        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-none"
+        rows={3}
+      />
+      
+      {/* Controls */}
+      <div className="flex justify-between items-center">
+        <div className="flex gap-2">
+          <label className="cursor-pointer flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
+            <Paperclip size={16} />
+            <span className="text-sm">Attach files</span>
+            <input
+              type="file"
+              multiple
+              onChange={handleFileSelect}
+              className="hidden"
+              accept="image/*,.pdf,.doc,.docx,.txt"
+            />
+          </label>
+        </div>
+        
+        <button
+          onClick={handleSubmit}
+          disabled={isSubmitting || (!content.trim() && files.length === 0)}
+          className="px-4 py-2 bg-teal-500 text-white rounded-lg hover:bg-teal-600 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isSubmitting ? "Posting..." : "Post Comment"}
-          <Send size={16} />
-        </Button>
+        </button>
       </div>
-    </form>
+    </div>
   );
 }

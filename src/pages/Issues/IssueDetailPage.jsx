@@ -53,7 +53,6 @@ export default function IssueDetailPage() {
   const { userRole } = useUIStore();
   const { user: currentUser, isLoading: authLoading } = useAuth();
 
-
   useEffect(() => {
     if (id === "new") {
       navigate("/issues/new");
@@ -181,10 +180,10 @@ export default function IssueDetailPage() {
     const otherComments = comments.filter(
       (c) => c.author?.role !== "client" && c.author_role !== "client"
     );
-    
-    const sortByDate = (a, b) => 
+
+    const sortByDate = (a, b) =>
       new Date(b.created_at) - new Date(a.created_at);
-    
+
     return [
       ...clientComments.sort(sortByDate),
       ...otherComments.sort(sortByDate),
@@ -192,28 +191,54 @@ export default function IssueDetailPage() {
   }, [comments]);
 
   // Handle comment submission with attachments
-  const handlePostComment = async (content, attachments = []) => {
-    // First upload attachments if any, then create comment with attachment IDs
-    let attachmentIds = [];
-    
-    if (attachments && attachments.length > 0) {
-      try {
-        const uploadPromises = attachments.map(async (file) => {
-          const response = await attachmentsApi.create(id, file, user?.id);
-          return response.data.id;
+
+
+  const handlePostComment = async (content, files = []) => {
+    try {
+      // First create the comment without attachments
+      const commentData = {
+        content,
+        visibility: commentVisibility,
+      };
+
+      // Create comment
+      const commentResponse = await commentsApi.create(id, commentData);
+      const comment = commentResponse.data;
+
+      // Upload files if any
+      if (files && files.length > 0) {
+        const uploadPromises = files.map(async (file) => {
+          try {
+            // Don't pass user ID - Django will get it from request.user
+            const response = await attachmentsApi.createForComment(
+              comment.id,
+              file
+            );
+            return response.data.id;
+          } catch (error) {
+            console.error("Error uploading attachment:", error);
+            // Don't throw - continue with other uploads
+            return null;
+          }
         });
-        attachmentIds = await Promise.all(uploadPromises);
-      } catch (error) {
-        console.error("Error uploading attachments:", error);
-        toast.error("Failed to upload some attachments");
+
+        await Promise.all(uploadPromises);
       }
+
+      // Invalidate queries to refresh data
+      queryClient.invalidateQueries(["comments", id]);
+      queryClient.invalidateQueries(["attachments", id]);
+
+      toast.success("Comment posted successfully!");
+      return comment;
+    } catch (error) {
+      console.error("Error posting comment:", error);
+      toast.error(
+        "Failed to post comment: " +
+          (error.response?.data?.detail || error.message)
+      );
+      throw error;
     }
-    
-    return commentMutation.mutateAsync({
-      content,
-      visibility: commentVisibility,
-      attachments: attachmentIds,
-    });
   };
 
   // Filter mentionable users based on query
@@ -288,43 +313,68 @@ export default function IssueDetailPage() {
   };
 
   // Mutations
- const uploadMutation = useMutation({
-   mutationFn: async (file) => {
-     console.log("Uploading file:", file.name);
-     setUploading(true);
 
-     // Use the corrected API
-     const response = await attachmentsApi.create(id, file, user?.id);
-     
-     // Remove from selected files after successful upload
-     setSelectedFiles(prev => prev.filter(f => f !== file && f.name !== file.name));
-     
-     return response;
-   },
-   onSuccess: () => {
-     queryClient.invalidateQueries(["attachments", id]);
-     toast.success("File uploaded successfully!");
-   },
-   onError: (error) => {
-     console.error("Upload error details:", {
-       status: error.response?.status,
-       data: error.response?.data,
-       message: error.message,
-     });
+  const uploadMutation = useMutation({
+    mutationFn: async (file) => {
+       console.log("Uploading file to issue:", {
+         fileName: file.name,
+         fileSize: file.size,
+         fileType: file.type,
+         issueId: id,
+       });
+       setUploading(true);
 
-     if (error.response?.status === 405) {
-       toast.error(
-         "Method not allowed. Check if endpoint exists and supports POST."
-       );
-     } else if (error.response?.status === 400) {
-       const errorData = error.response.data;
-       toast.error(`Upload failed: ${JSON.stringify(errorData)}`);
-     } else {
-       toast.error("Failed to upload file");
-     }
-   },
-   onSettled: () => setUploading(false),
- });
+       try {
+         const response = await attachmentsApi.create(id, file);
+
+         console.log("Upload response:", response.data);
+
+         setSelectedFiles((prev) =>
+           prev.filter((f) => f.name !== file.name && f.size !== file.size)
+         );
+
+         return response;
+       } catch (error) {
+         console.error("Upload error details:", {
+           status: error.response?.status,
+           data: error.response?.data,
+           config: error.config,
+           message: error.message,
+         });
+         throw error;
+       }
+    },
+    onSuccess: (response) => {
+      console.log("Upload successful:", response.data);
+      queryClient.invalidateQueries(["attachments", id]);
+      queryClient.invalidateQueries(["issues", id]);
+      toast.success("File uploaded successfully!");
+    },
+    onError: (error) => {
+      console.error("Upload error details:", {
+        status: error.response?.status,
+        data: error.response?.data,
+        message: error.message,
+      });
+
+      let errorMsg = "Failed to upload file";
+
+      if (error.response?.data) {
+        const errorData = error.response.data;
+        if (errorData.detail) {
+          errorMsg = errorData.detail;
+          if (errorData.error) {
+            errorMsg += `: ${errorData.error}`;
+          }
+        } else if (errorData.error) {
+          errorMsg = errorData.error;
+        }
+      }
+
+      toast.error(errorMsg);
+    },
+    onSettled: () => setUploading(false),
+  });
 
   const statusMutation = useMutation({
     mutationFn: (status) => issuesApi.transition(id, status),
@@ -335,16 +385,18 @@ export default function IssueDetailPage() {
     },
     onError: (error) => {
       console.error("Status update error details:", error);
-      
+
       // Improved error message from backend
       let errorMsg = "Failed to update status";
-      
+
       if (error.response?.data) {
         const data = error.response.data;
         if (data.detail) {
           errorMsg = data.detail;
         } else if (data.allowed) {
-          errorMsg = `Invalid status. Allowed values: ${data.allowed.join(", ")}`;
+          errorMsg = `Invalid status. Allowed values: ${data.allowed.join(
+            ", "
+          )}`;
         } else if (typeof data === "string") {
           errorMsg = data;
         } else {
@@ -353,7 +405,7 @@ export default function IssueDetailPage() {
       } else if (error.message) {
         errorMsg = error.message;
       }
-      
+
       toast.error(errorMsg);
     },
   });
@@ -384,67 +436,67 @@ export default function IssueDetailPage() {
       toast.error("Failed to update issue");
     },
   });
-const commentMutation = useMutation({
-  mutationFn: async (commentData) => {  
-    try {
-      const response = await commentsApi.create(id, {
-        content: commentData.content,
-        visibility: commentData.visibility || "public",
-        attachments: commentData.attachments || [], // Pass attachments
-      });
-      
-      return response;
-    } catch (error) {
-      console.error("DEBUG: Full error details:", {
-        status: error.response?.status,
-        data: error.response?.data,
-        message: error.message,
-        url: error.config?.url,
-        requestData: {
+  const commentMutation = useMutation({
+    mutationFn: async (commentData) => {
+      try {
+        const response = await commentsApi.create(id, {
           content: commentData.content,
-          visibility: commentData.visibility,
-          attachments: commentData.attachments
+          visibility: commentData.visibility || "public",
+          attachments: commentData.attachments || [], // Pass attachments
+        });
+
+        return response;
+      } catch (error) {
+        console.error("DEBUG: Full error details:", {
+          status: error.response?.status,
+          data: error.response?.data,
+          message: error.message,
+          url: error.config?.url,
+          requestData: {
+            content: commentData.content,
+            visibility: commentData.visibility,
+            attachments: commentData.attachments,
+          },
+        });
+
+        // Show more detailed error message
+        if (error.response?.data) {
+          const errorData = error.response.data;
+          if (typeof errorData === "string") {
+            throw new Error(errorData);
+          } else if (errorData.detail) {
+            throw new Error(errorData.detail);
+          } else if (errorData.non_field_errors) {
+            throw new Error(errorData.non_field_errors[0]);
+          } else {
+            throw new Error(JSON.stringify(errorData));
+          }
         }
-      });
-      
-      // Show more detailed error message
-      if (error.response?.data) {
-        const errorData = error.response.data;
-        if (typeof errorData === 'string') {
-          throw new Error(errorData);
-        } else if (errorData.detail) {
-          throw new Error(errorData.detail);
-        } else if (errorData.non_field_errors) {
-          throw new Error(errorData.non_field_errors[0]);
-        } else {
-          throw new Error(JSON.stringify(errorData));
-        }
+        throw error;
       }
-      throw error;
-    }
-  },
-  onSuccess: () => {
-    queryClient.invalidateQueries(["comments", id]);
-    toast.success("Comment posted successfully!");
-  },
-  onError: (error) => {
-    console.error("Comment error:", error);
-    
-    const errorMessage = error.message || "Failed to post comment";
-    
-    if (error.response?.status === 500) {
-      toast.error("Server error. Check Django logs for details.");
-    } else if (error.response?.status === 403) {
-      toast.error("You don't have permission to comment on this issue");
-    } else if (error.response?.status === 404) {
-      toast.error("Issue not found");
-    } else if (error.response?.status === 400) {
-      toast.error(`Validation error: ${errorMessage}`);
-    } else {
-      toast.error(errorMessage);
-    }
-  },
-});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(["comments", id]);
+      toast.success("Comment posted successfully!");
+    },
+    onError: (error) => {
+      console.error("Comment error:", error);
+
+      const errorMessage = error.message || "Failed to post comment";
+
+      if (error.response?.status === 500) {
+        toast.error("Server error. Check Django logs for details.");
+      } else if (error.response?.status === 403) {
+        toast.error("You don't have permission to comment on this issue");
+      } else if (error.response?.status === 404) {
+        toast.error("Issue not found");
+      } else if (error.response?.status === 400) {
+        toast.error(`Validation error: ${errorMessage}`);
+      } else {
+        toast.error(errorMessage);
+      }
+    },
+  });
 
   const editCommentMutation = useMutation({
     mutationFn: ({ commentId, content }) =>
@@ -740,7 +792,8 @@ const commentMutation = useMutation({
                     className={`px-3 py-1 rounded-full text-sm font-medium ${
                       issue.status === "open"
                         ? "bg-red-100 text-red-700"
-                        : issue.status === "in_progress" || issue.status === "in-progress"
+                        : issue.status === "in_progress" ||
+                          issue.status === "in-progress"
                         ? "bg-amber-100 text-amber-700"
                         : issue.status === "resolved"
                         ? "bg-emerald-100 text-emerald-700"
@@ -750,7 +803,10 @@ const commentMutation = useMutation({
                     }`}
                   >
                     {issue.status
-                      ? issue.status.replace(/_/g, " ").replace("-", " ").toUpperCase()
+                      ? issue.status
+                          .replace(/_/g, " ")
+                          .replace("-", " ")
+                          .toUpperCase()
                       : "UNKNOWN"}
                   </span>
 
@@ -779,7 +835,8 @@ const commentMutation = useMutation({
               {/* Status icon */}
               <div className="text-gray-400">
                 {issue.status === "open" && <AlertCircle size={24} />}
-                {(issue.status === "in_progress" || issue.status === "in-progress") && <Clock size={24} />}
+                {(issue.status === "in_progress" ||
+                  issue.status === "in-progress") && <Clock size={24} />}
                 {issue.status === "resolved" && <CheckCircle size={24} />}
                 {issue.status === "closed" && (
                   <CheckCircle size={24} className="text-gray-500" />
@@ -917,7 +974,8 @@ const commentMutation = useMutation({
           {/* Attachments card */}
           <div className="bg-white rounded-xl shadow-lg p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <Paperclip size={18} /> Attachments ({allAttachments.length + selectedFiles.length})
+              <Paperclip size={18} /> Attachments (
+              {allAttachments.length + selectedFiles.length})
             </h3>
 
             <FileUploader
@@ -928,7 +986,6 @@ const commentMutation = useMutation({
                 setSelectedFiles((prev) => [...prev, ...arr]);
                 arr.forEach((file) => handleFileUpload(file));
               }}
-              
             />
 
             {uploadMutation.isPending && (
@@ -948,13 +1005,18 @@ const commentMutation = useMutation({
                       className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200"
                     >
                       <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <Paperclip size={16} className="text-blue-400 flex-shrink-0" />
+                        <Paperclip
+                          size={16}
+                          className="text-blue-400 flex-shrink-0"
+                        />
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-gray-900 truncate">
                             {file.name || file.filename || "Unnamed file"}
                           </p>
                           <p className="text-xs text-gray-500">
-                            {file.size ? formatFileSize(file.size) : "Uploading..."}
+                            {file.size
+                              ? formatFileSize(file.size)
+                              : "Uploading..."}
                           </p>
                         </div>
                       </div>
@@ -964,78 +1026,103 @@ const commentMutation = useMutation({
               )}
 
               {/* Show uploaded attachments */}
-              {allAttachments.length > 0 ? (
-                allAttachments.map((attachment, index) => {
-                  const fileUrl = attachment.file_url || attachment.url || attachment.file;
-                  const isImage = attachment.mime_type?.startsWith('image/')
-                    || /\.(jpg|jpeg|png|gif|webp)$/i.test(fileUrl || '');
-                                    
-                  return (
-                    <div
-                      key={attachment.id || index}
-                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100"
-                    >
-                      <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <Paperclip size={16} className="text-gray-400 flex-shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-900 truncate">
-                            {attachment.filename ||
-                              attachment.name ||
-                              attachment.file?.split("/").pop() ||
-                              "Unnamed file"}
-                          </p>
-                          {attachment.size && (
-                            <p className="text-xs text-gray-500">
-                              {formatFileSize(attachment.size)}
-                            </p>
-                          )}
-                        </div>
-                      </div>
+              {allAttachments.length > 0
+                ? allAttachments.map((attachment, index) => {
+                    const isImage =
+                      attachment.mime_type?.startsWith("image/") ||
+                      /\.(jpg|jpeg|png|gif|webp)$/i.test(
+                        attachment.file_url || attachment.filename || ""
+                      );
 
-                      <div className="flex items-center gap-2">
-                        {isImage && fileUrl && (
+                    return (
+                      <div
+                        key={attachment.id || index}
+                        className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 group"
+                      >
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <Paperclip
+                            size={16}
+                            className="text-gray-400 flex-shrink-0"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">
+                              {attachment.filename ||
+                                attachment.name ||
+                                (attachment.file_url
+                                  ? attachment.file_url.split("/").pop()
+                                  : "Unnamed file")}
+                            </p>
+                            {attachment.size && (
+                              <p className="text-xs text-gray-500">
+                                {formatFileSize(attachment.size)}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          {isImage && (
+                            <button
+                              onClick={() => {
+                                // Store attachment ID instead of direct URL
+                                setSelectedImage({
+                                  id: attachment.id,
+                                  type: "attachment",
+                                });
+                              }}
+                              className="text-teal-600 hover:text-teal-700 p-1"
+                              title="View image"
+                            >
+                              <ImageIcon size={16} />
+                            </button>
+                          )}
                           <button
-                            onClick={() => {
-                              // Construct full URL if relative
-                              let fullUrl = fileUrl;
-                              if (!fileUrl.startsWith('http')) {
-                                const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
-                                // Remove /api/v1 if present, then add media path
-                                const mediaBase = baseUrl.replace('/api/v1', '');
-                                fullUrl = `${mediaBase}${fileUrl.startsWith('/') ? '' : '/'}${fileUrl}`;
+                            onClick={async () => {
+                              try {
+                                // Use axiosClient for authenticated download
+                                const response = await attachmentsApi.download(
+                                  attachment.id
+                                );
+
+                                // Create blob URL
+                                const url = window.URL.createObjectURL(
+                                  response.data
+                                );
+                                const link = document.createElement("a");
+                                link.href = url;
+                                link.download =
+                                  attachment.filename || "download";
+                                document.body.appendChild(link);
+                                link.click();
+
+                                // Cleanup
+                                setTimeout(() => {
+                                  document.body.removeChild(link);
+                                  window.URL.revokeObjectURL(url);
+                                }, 100);
+                              } catch (error) {
+                                console.error("Download error:", error);
+                                toast.error("Failed to download file");
                               }
-                              setSelectedImage(fullUrl);
                             }}
-                            className="text-teal-600 hover:text-teal-700 p-1"
-                            title="View image"
-                          >
-                            <ImageIcon size={16} />
-                          </button>
-                        )}
-                        {fileUrl && (
-                          <a
-                            href={fileUrl.startsWith('http') ? fileUrl : `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}${fileUrl}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
                             className="text-teal-600 hover:text-teal-700 p-1"
                             title="Download"
                           >
                             <Download size={16} />
-                          </a>
-                        )}
+                          </button>
+                        </div>
                       </div>
+                    );
+                  })
+                : selectedFiles.length === 0 && (
+                    <div className="text-center py-4">
+                      <Paperclip className="mx-auto h-8 w-8 text-gray-400 mb-2" />
+                      <p className="text-gray-500">No attachments yet</p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        Upload files using the box above
+                      </p>
                     </div>
-                  );
-                })
-              ) : selectedFiles.length === 0 && (
-                <div className="text-center py-4">
-                  <Paperclip className="mx-auto h-8 w-8 text-gray-400 mb-2" />
-                  <p className="text-gray-500">No attachments yet</p>
-                  <p className="text-xs text-gray-400 mt-1">
-                    Upload files using the box above
-                  </p>
-                </div>
-              )}
+                  )}
             </div>
           </div>
 
@@ -1048,7 +1135,9 @@ const commentMutation = useMutation({
             <div className="space-y-4">
               <div>
                 <p className="text-xs text-gray-500 mb-1">Issue ID</p>
-                <p className="font-medium text-gray-900">#{issue.id.slice(0, 8)}</p>
+                <p className="font-medium text-gray-900">
+                  #{issue.id.slice(0, 8)}
+                </p>
               </div>
 
               <div>
@@ -1057,14 +1146,18 @@ const commentMutation = useMutation({
                   className={`inline-block px-2 py-1 rounded text-xs font-medium ${
                     issue.status === "open"
                       ? "bg-red-100 text-red-700"
-                      : issue.status === "in_progress" || issue.status === "in-progress"
+                      : issue.status === "in_progress" ||
+                        issue.status === "in-progress"
                       ? "bg-amber-100 text-amber-700"
                       : issue.status === "resolved"
                       ? "bg-emerald-100 text-emerald-700"
                       : "bg-gray-100 text-gray-700"
                   }`}
                 >
-                  {issue.status?.replace(/_/g, " ").replace("-", " ").toUpperCase()}
+                  {issue.status
+                    ?.replace(/_/g, " ")
+                    .replace("-", " ")
+                    .toUpperCase()}
                 </span>
               </div>
 
