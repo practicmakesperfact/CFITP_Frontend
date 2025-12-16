@@ -1061,20 +1061,28 @@ export default function IssueDetailPage() {
                         </div>
 
                         <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                 
                           {isImage && (
                             <button
                               onClick={() => {
-                                // Store attachment ID instead of direct URL
-                                setSelectedImage({
-                                  id: attachment.id,
-                                  type: "attachment",
-                                });
+                                console.log(
+                                  "Opening image modal for attachment:",
+                                  attachment.id
+                                );
+                                setSelectedImage({ id: attachment.id });
                               }}
                               className="text-teal-600 hover:text-teal-700 p-1"
                               title="View image"
                             >
                               <ImageIcon size={16} />
                             </button>
+                          )}
+                          {/* And update the ImageModal usage: */}
+                          {selectedImage?.id && (
+                            <ImageModal
+                              attachmentId={selectedImage.id}
+                              onClose={() => setSelectedImage(null)}
+                            />
                           )}
                           <button
                             onClick={async () => {
@@ -1227,7 +1235,7 @@ export default function IssueDetailPage() {
       {/* Image Modal */}
       {selectedImage && (
         <ImageModal
-          imageUrl={selectedImage}
+          attachmentId={selectedImage.id}
           onClose={() => setSelectedImage(null)}
         />
       )}
