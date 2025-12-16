@@ -1,4 +1,3 @@
-
 import { useQuery } from "@tanstack/react-query";
 import { issuesApi } from "../../api/issuesApi";
 import { useNavigate } from "react-router-dom";
@@ -16,6 +15,7 @@ import {
   Clock,
   CheckCircle,
   ChevronDown,
+  RotateCcw,
 } from "lucide-react";
 import Chart from "react-apexcharts";
 import { useState } from "react";
@@ -36,27 +36,39 @@ export default function ClientDashboard() {
   const user = JSON.parse(localStorage.getItem("user_profile") || "{}");
 
   // Filter issues for this client only
-    const issues = allIssues.filter((i) => {
-      return (
-        i.reporter_email === user.email ||
-        i.created_by_email === user.email ||
-        (i.reporter && i.reporter.id === user.id) ||
-        (i.created_by && i.created_by.id === user.id)
-      );
-    });
+  const issues = allIssues.filter((i) => {
+    return (
+      i.reporter_email === user.email ||
+      i.created_by_email === user.email ||
+      (i.reporter && i.reporter.id === user.id) ||
+      (i.created_by && i.created_by.id === user.id)
+    );
+  });
 
-
+  // Status counts - handle both 'in_progress' and 'in-progress'
   const open = issues.filter((i) => i.status === "open").length;
-  const inProgress = issues.filter((i) => i.status === "in-progress").length;
+  const inProgress = issues.filter(
+    (i) => i.status === "in_progress" || i.status === "in-progress"
+  ).length;
+  const resolved = issues.filter((i) => i.status === "resolved").length;
   const closed = issues.filter((i) => i.status === "closed").length;
+  const reopen = issues.filter((i) => i.status === "reopen").length;
 
+  // Pie chart with ALL 5 statuses
   const pieOptions = {
-    series: [open, inProgress, closed],
-    colors: ["#ef4444", "#f59e0b", "#10b981"],
+    series: [open, inProgress, resolved, closed, reopen],
+    colors: ["#ef4444", "#f59e0b", "#3b82f6", "#10b981", "#8b5cf6"],
     chart: { type: "donut", height: 300 },
-    labels: ["Open", "In Progress", "Closed"],
-    legend: { position: "bottom" },
-    dataLabels: { enabled: false },
+    labels: ["Open", "In Progress", "Resolved", "Closed", "Reopen"],
+    legend: {
+      position: "bottom",
+      fontSize: "14px",
+      fontFamily: "inherit",
+      fontWeight: 500,
+    },
+    dataLabels: {
+      enabled: false,
+    },
     plotOptions: {
       pie: {
         donut: {
@@ -65,12 +77,31 @@ export default function ClientDashboard() {
             show: true,
             total: {
               show: true,
-              label: "Total",
+              label: "Total Issues",
               fontSize: "22px",
               fontWeight: 600,
               color: "#374151",
+              formatter: function (w) {
+                return issues.length.toString();
+              },
+            },
+            value: {
+              show: true,
+              fontSize: "28px",
+              fontWeight: 700,
+              color: "#111827",
+              formatter: function (val) {
+                return Math.round(val).toString();
+              },
             },
           },
+        },
+      },
+    },
+    tooltip: {
+      y: {
+        formatter: function (value) {
+          return value + " issue" + (value !== 1 ? "s" : "");
         },
       },
     },
@@ -90,45 +121,19 @@ export default function ClientDashboard() {
       ).length
   );
 
-  const chartData = dailyCounts.some(count => count>0)
-    ? dailyCounts
-    : [0, 0, 0, 0, 0, 0, 0];
-
-  // const lineOptions = {
-  //   series: [{
-  //           name: "Issues", 
-  //           data: dailyCounts 
-  //           }],
-  //   colors: ["#0EA5A4"],
-  //   chart: { 
-  //           type: "area", 
-  //           height: 300, 
-  //           toolbar: { show: false } 
-  //         },
-  //   xaxis: {
-  //     categories: weekDays.map((d) => format(d, "EEE")),
-  //     labels: { 
-  //              style: { colors: "#6b7280" } },
-  //           },
-  //   yaxis: { 
-  //             min: 0, 
-  //             max: Math.max(...dailyCounts, 5) + 1, tickAmount: 4
-  //           },
-  //   fill: { opacity: 0.1 },
-  //   stroke: { curve: "smooth", width: 3 },
-  //   dataLabels: { enabled: false },
-  //   grid: { show: false },
-  // };
+  // RESTORED: Original line graph
   const lineOptions = {
     series: [
       {
         name: "Issues",
-        data: chartData,
+        data: dailyCounts.some((count) => count > 0)
+          ? dailyCounts
+          : [0, 0, 0, 0, 0, 0, 0],
       },
     ],
     colors: ["#0EA5A4"],
     chart: {
-      type: "bar", // ✅ Changed from "area" to "bar" for visibility
+      type: "area",
       height: 300,
       toolbar: { show: false },
     },
@@ -137,45 +142,32 @@ export default function ClientDashboard() {
       labels: {
         style: {
           colors: "#6b7280",
-          fontSize: "14px",
-          fontWeight: 600,
         },
       },
-      axisBorder: { show: true },
-      axisTicks: { show: true },
     },
     yaxis: {
       min: 0,
-      max: Math.max(...chartData, 5) + 1,
+      max: Math.max(...dailyCounts, 5) + 1,
       tickAmount: 4,
-      labels: {
-        style: {
-          colors: "#6b7280",
-          fontSize: "12px",
-        },
+    },
+    fill: {
+      type: "gradient",
+      gradient: {
+        shadeIntensity: 1,
+        opacityFrom: 0.7,
+        opacityTo: 0.1,
+        stops: [0, 90, 100],
       },
     },
-    plotOptions: {
-      bar: {
-        borderRadius: 6,
-        columnWidth: "60%", // Makes bars wider
-        dataLabels: {
-          position: "top", // Shows numbers on top of bars
-        },
-      },
+    stroke: {
+      curve: "smooth",
+      width: 3,
     },
     dataLabels: {
-      enabled: true, // ✅ Shows numbers on bars
-      offsetY: -20,
-      style: {
-        fontSize: "12px",
-        colors: ["#374151"],
-      },
+      enabled: false,
     },
     grid: {
-      borderColor: "#e5e7eb",
-      strokeDashArray: 4,
-      position: "back",
+      show: false,
     },
     tooltip: {
       y: {
@@ -217,30 +209,40 @@ export default function ClientDashboard() {
             Here's what's happening with your issues
           </p>
         </div>
-        <button
-          onClick={() => navigate("/app/issues/new")}
-          className="bg-[#0EA5A4] hover:bg-teal-700 text-white px-8 py-4 rounded-2xl font-bold flex items-center gap-3 shadow-lg transition-all hover:scale-105"
-        >
-          <Plus size={28} /> New Issue
-        </button>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+      {/* 6 CARDS */}
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-6">
         <div className="bg-white rounded-2xl shadow-lg p-6 border text-center">
           <AlertCircle size={40} className="mx-auto text-red-500 mb-3" />
           <p className="text-4xl font-bold text-red-600">{open}</p>
           <p className="text-slate-600">Open Issues</p>
         </div>
+
         <div className="bg-white rounded-2xl shadow-lg p-6 border text-center">
           <Clock size={40} className="mx-auto text-amber-500 mb-3" />
           <p className="text-4xl font-bold text-amber-600">{inProgress}</p>
           <p className="text-slate-600">In Progress</p>
         </div>
+
+        <div className="bg-white rounded-2xl shadow-lg p-6 border text-center">
+          <CheckCircle size={40} className="mx-auto text-blue-500 mb-3" />
+          <p className="text-4xl font-bold text-blue-600">{resolved}</p>
+          <p className="text-slate-600">Resolved</p>
+        </div>
+
         <div className="bg-white rounded-2xl shadow-lg p-6 border text-center">
           <CheckCircle size={40} className="mx-auto text-emerald-500 mb-3" />
           <p className="text-4xl font-bold text-emerald-600">{closed}</p>
           <p className="text-slate-600">Closed</p>
         </div>
+
+        <div className="bg-white rounded-2xl shadow-lg p-6 border text-center">
+          <RotateCcw size={40} className="mx-auto text-purple-500 mb-3" />
+          <p className="text-4xl font-bold text-purple-600">{reopen}</p>
+          <p className="text-slate-600">Reopened</p>
+        </div>
+
         <div className="bg-white rounded-2xl shadow-lg p-6 border text-center">
           <Clock size={40} className="mx-auto text-blue-500 mb-3" />
           <p className="text-4xl font-bold text-blue-600">{issues.length}</p>
@@ -248,6 +250,7 @@ export default function ClientDashboard() {
         </div>
       </div>
 
+      {/* CHARTS */}
       <div className="grid md:grid-cols-2 gap-8">
         <div className="bg-white rounded-3xl shadow-lg p-8 border">
           <h3 className="text-2xl font-bold text-slate-800 mb-6">
@@ -260,6 +263,8 @@ export default function ClientDashboard() {
             height={320}
           />
         </div>
+
+        {/* RESTORED: Original line graph */}
         <div className="bg-white rounded-3xl shadow-lg p-8 border">
           <h3 className="text-2xl font-bold text-slate-800 mb-6">
             Issues This Week
@@ -273,6 +278,7 @@ export default function ClientDashboard() {
         </div>
       </div>
 
+      {/* Recent Activity */}
       <div className="bg-white rounded-3xl shadow-lg border border-gray-200 p-8">
         <div className="flex items-center justify-between mb-8">
           <h2 className="text-3xl font-bold text-slate-800">Recent Activity</h2>
@@ -305,7 +311,7 @@ export default function ClientDashboard() {
             {recentIssues.map((issue) => (
               <div
                 key={issue.id}
-                onClick={() => navigate(`/issues/${issue.id}`)}
+                onClick={() => navigate(`/app/issues/${issue.id}`)}
                 className="flex items-center justify-between p-6 bg-gradient-to-r from-gray-50 to-gray-100 rounded-2xl hover:from-gray-100 hover:to-gray-200 transition-all cursor-pointer border border-gray-200 shadow-md hover:shadow-lg"
               >
                 <div className="flex-1">
@@ -324,12 +330,20 @@ export default function ClientDashboard() {
                     className={`px-5 py-2 rounded-full text-sm font-bold ${
                       issue.status === "open"
                         ? "bg-red-100 text-red-700"
-                        : issue.status === "in-progress" || issue.status === "in_progress"
+                        : issue.status === "in-progress" ||
+                          issue.status === "in_progress"
                         ? "bg-amber-100 text-amber-700"
-                        : "bg-emerald-100 text-emerald-700"
+                        : issue.status === "resolved"
+                        ? "bg-blue-100 text-blue-700"
+                        : issue.status === "closed"
+                        ? "bg-emerald-100 text-emerald-700"
+                        : "bg-purple-100 text-purple-700"
                     }`}
                   >
-                    {issue.status?.replace(/_/g, " ").replace("-", " ").toUpperCase()}
+                    {issue.status
+                      ?.replace(/_/g, " ")
+                      .replace(/-/g, " ")
+                      .toUpperCase()}
                   </span>
                 </div>
               </div>
@@ -337,7 +351,6 @@ export default function ClientDashboard() {
           </div>
         )}
 
-        {/* Scroll indicator */}
         {recentIssues.length > 4 && (
           <div className="text-center mt-6 pt-4 border-t border-gray-200">
             <p className="text-slate-500 text-sm flex items-center justify-center gap-2">
