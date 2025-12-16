@@ -18,6 +18,7 @@ import {
   X,
   Send,
   ImageIcon,
+  Trash2,
 } from "lucide-react";
 
 import { issuesApi } from "../../api/issuesApi.js";
@@ -47,7 +48,6 @@ export default function IssueDetailPage() {
   const [assignOpen, setAssignOpen] = useState(false);
   const [commentVisibility, setCommentVisibility] = useState("public");
   const [selectedImage, setSelectedImage] = useState(null);
-  // Add state for selected files (around line 39)
   const [selectedFiles, setSelectedFiles] = useState([]);
 
   const { userRole } = useUIStore();
@@ -59,7 +59,7 @@ export default function IssueDetailPage() {
       return;
     }
   }, [id, navigate]);
-  // Get user from localStorage as fallback
+
   const getLocalUser = () => {
     try {
       const userStr = localStorage.getItem("user_profile");
@@ -83,7 +83,7 @@ export default function IssueDetailPage() {
       console.error("Error loading issue:", err);
       toast.error("Failed to load issue details");
     },
-    enabled: !!id && !authLoading, // Wait for auth to load
+    enabled: !!id && !authLoading,
   });
 
   // Fetch comments
@@ -108,7 +108,7 @@ export default function IssueDetailPage() {
         toast.error("Failed to load comments");
       }
     },
-    enabled: !!id, // Only fetch if we have an issue ID
+    enabled: !!id,
   });
 
   // Fetch attachments
@@ -129,12 +129,10 @@ export default function IssueDetailPage() {
       }),
     onError: (err) => {
       console.error("Error loading attachments:", err);
-      // Don't show toast for 404, it's expected
     },
     enabled: !!id,
   });
 
-  // Get attachments from issue data as fallback
   const issueAttachments = issueRes?.attachments || [];
   const allAttachments =
     attachments.length > 0 ? attachments : issueAttachments;
@@ -152,7 +150,7 @@ export default function IssueDetailPage() {
         return [];
       }
     },
-    enabled: userRole === "manager", // Only fetch for managers
+    enabled: userRole === "manager",
   });
 
   // Fetch users for mentions
@@ -162,7 +160,6 @@ export default function IssueDetailPage() {
       try {
         const response = await axiosClient.get("/users/");
         const users = response.data.results || response.data || [];
-        // Return all users for mentions (clients can mention staff/managers, etc.)
         return users;
       } catch (error) {
         console.error("Error fetching users for mentions:", error);
@@ -171,89 +168,6 @@ export default function IssueDetailPage() {
     },
     enabled: !!id,
   });
-
-  // Sort comments: client comments first, then by date (newest first)
-  const sortedComments = useMemo(() => {
-    const clientComments = comments.filter(
-      (c) => c.author?.role === "client" || c.author_role === "client"
-    );
-    const otherComments = comments.filter(
-      (c) => c.author?.role !== "client" && c.author_role !== "client"
-    );
-
-    const sortByDate = (a, b) =>
-      new Date(b.created_at) - new Date(a.created_at);
-
-    return [
-      ...clientComments.sort(sortByDate),
-      ...otherComments.sort(sortByDate),
-    ];
-  }, [comments]);
-
-  // Handle comment submission with attachments
-
-
-  const handlePostComment = async (content, files = []) => {
-    try {
-      // First create the comment without attachments
-      const commentData = {
-        content,
-        visibility: commentVisibility,
-      };
-
-      // Create comment
-      const commentResponse = await commentsApi.create(id, commentData);
-      const comment = commentResponse.data;
-
-      // Upload files if any
-      if (files && files.length > 0) {
-        const uploadPromises = files.map(async (file) => {
-          try {
-            // Don't pass user ID - Django will get it from request.user
-            const response = await attachmentsApi.createForComment(
-              comment.id,
-              file
-            );
-            return response.data.id;
-          } catch (error) {
-            console.error("Error uploading attachment:", error);
-            // Don't throw - continue with other uploads
-            return null;
-          }
-        });
-
-        await Promise.all(uploadPromises);
-      }
-
-      // Invalidate queries to refresh data
-      queryClient.invalidateQueries(["comments", id]);
-      queryClient.invalidateQueries(["attachments", id]);
-
-      toast.success("Comment posted successfully!");
-      return comment;
-    } catch (error) {
-      console.error("Error posting comment:", error);
-      toast.error(
-        "Failed to post comment: " +
-          (error.response?.data?.detail || error.message)
-      );
-      throw error;
-    }
-  };
-
-  // Filter mentionable users based on query
-  const getMentionableUsers = (query) => {
-    if (!query) return mentionableUsers.slice(0, 5);
-    const lowerQuery = query.toLowerCase();
-    return mentionableUsers
-      .filter(
-        (u) =>
-          u.email?.toLowerCase().includes(lowerQuery) ||
-          u.first_name?.toLowerCase().includes(lowerQuery) ||
-          u.last_name?.toLowerCase().includes(lowerQuery)
-      )
-      .slice(0, 5);
-  };
 
   // Helper functions
   const getUserInitials = (name) => {
@@ -312,65 +226,143 @@ export default function IssueDetailPage() {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
   };
 
-  // Mutations
+  // Sort comments
+  const sortedComments = useMemo(() => {
+    const clientComments = comments.filter(
+      (c) => c.author?.role === "client" || c.author_role === "client"
+    );
+    const otherComments = comments.filter(
+      (c) => c.author?.role !== "client" && c.author_role !== "client"
+    );
 
+    const sortByDate = (a, b) =>
+      new Date(b.created_at) - new Date(a.created_at);
+
+    return [
+      ...clientComments.sort(sortByDate),
+      ...otherComments.sort(sortByDate),
+    ];
+  }, [comments]);
+
+  // Check permissions
+  const isIssueCreator = user?.id === issueRes?.created_by?.id;
+  const isAssignedStaff = user?.id === issueRes?.assignee?.id;
+  const currentUserRole = userRole || user?.role;
+
+  // Check if issue can be edited
+  const canEditIssue = () => {
+    if (!issueRes) return false;
+
+    const editableStatuses = ["open", "reopen"];
+    const isEditableStatus = editableStatuses.includes(issueRes.status);
+
+    // Admin can always edit
+    if (currentUserRole === "admin") {
+      return true;
+    }
+
+    // Manager can always edit
+    if (currentUserRole === "manager") {
+      return true;
+    }
+
+    // Client can edit only their own issues in editable status
+    if (currentUserRole === "client" && isIssueCreator) {
+      return isEditableStatus;
+    }
+
+    // Staff can edit only assigned issues in editable status
+    if (currentUserRole === "staff" && isAssignedStaff) {
+      return isEditableStatus;
+    }
+
+    return false;
+  };
+
+  // Get edit restriction message
+  const getEditRestrictionMessage = () => {
+    if (!issueRes) return "";
+
+    const editableStatuses = ["open", "reopen"];
+
+    if (!editableStatuses.includes(issueRes.status)) {
+      return `Editing is only allowed when issue status is "Open" or "Reopen". Current status: ${issueRes.status
+        .replace(/_/g, " ")
+        .toUpperCase()}`;
+    }
+
+    if (currentUserRole === "client" && !isIssueCreator) {
+      return "Only the issue reporter can edit this issue.";
+    }
+
+    if (currentUserRole === "staff" && !isAssignedStaff) {
+      return "Only assigned staff can edit this issue.";
+    }
+
+    return "";
+  };
+
+  // Handle attachment download
+  const handleDownloadAttachment = async (attachment) => {
+    try {
+      const response = await attachmentsApi.download(attachment.id);
+      const url = window.URL.createObjectURL(response.data);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = attachment.filename || attachment.name || "download";
+      document.body.appendChild(link);
+      link.click();
+
+      setTimeout(() => {
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      }, 100);
+    } catch (error) {
+      console.error("Download error:", error);
+      toast.error("Failed to download file");
+    }
+  };
+
+  // Handle attachment deletion
+  const handleDeleteAttachment = async (attachmentId) => {
+    if (window.confirm("Are you sure you want to delete this attachment?")) {
+      try {
+        await attachmentsApi.delete(attachmentId);
+        queryClient.invalidateQueries(["attachments", id]);
+        queryClient.invalidateQueries(["issues", id]);
+        toast.success("Attachment deleted successfully!");
+      } catch (error) {
+        console.error("Delete attachment error:", error);
+        toast.error("Failed to delete attachment");
+      }
+    }
+  };
+
+  // Mutations
   const uploadMutation = useMutation({
     mutationFn: async (file) => {
-       console.log("Uploading file to issue:", {
-         fileName: file.name,
-         fileSize: file.size,
-         fileType: file.type,
-         issueId: id,
-       });
-       setUploading(true);
-
-       try {
-         const response = await attachmentsApi.create(id, file);
-
-         console.log("Upload response:", response.data);
-
-         setSelectedFiles((prev) =>
-           prev.filter((f) => f.name !== file.name && f.size !== file.size)
-         );
-
-         return response;
-       } catch (error) {
-         console.error("Upload error details:", {
-           status: error.response?.status,
-           data: error.response?.data,
-           config: error.config,
-           message: error.message,
-         });
-         throw error;
-       }
+      setUploading(true);
+      try {
+        const response = await attachmentsApi.create(id, file);
+        setSelectedFiles((prev) =>
+          prev.filter((f) => f.name !== file.name && f.size !== file.size)
+        );
+        return response;
+      } catch (error) {
+        console.error("Upload error:", error);
+        throw error;
+      }
     },
     onSuccess: (response) => {
-      console.log("Upload successful:", response.data);
       queryClient.invalidateQueries(["attachments", id]);
       queryClient.invalidateQueries(["issues", id]);
       toast.success("File uploaded successfully!");
     },
     onError: (error) => {
-      console.error("Upload error details:", {
-        status: error.response?.status,
-        data: error.response?.data,
-        message: error.message,
-      });
-
       let errorMsg = "Failed to upload file";
-
-      if (error.response?.data) {
-        const errorData = error.response.data;
-        if (errorData.detail) {
-          errorMsg = errorData.detail;
-          if (errorData.error) {
-            errorMsg += `: ${errorData.error}`;
-          }
-        } else if (errorData.error) {
-          errorMsg = errorData.error;
-        }
+      if (error.response?.data?.detail) {
+        errorMsg = error.response.data.detail;
       }
-
       toast.error(errorMsg);
     },
     onSettled: () => setUploading(false),
@@ -384,28 +376,10 @@ export default function IssueDetailPage() {
       toast.success("Status updated successfully!");
     },
     onError: (error) => {
-      console.error("Status update error details:", error);
-
-      // Improved error message from backend
       let errorMsg = "Failed to update status";
-
-      if (error.response?.data) {
-        const data = error.response.data;
-        if (data.detail) {
-          errorMsg = data.detail;
-        } else if (data.allowed) {
-          errorMsg = `Invalid status. Allowed values: ${data.allowed.join(
-            ", "
-          )}`;
-        } else if (typeof data === "string") {
-          errorMsg = data;
-        } else {
-          errorMsg = JSON.stringify(data);
-        }
-      } else if (error.message) {
-        errorMsg = error.message;
+      if (error.response?.data?.detail) {
+        errorMsg = error.response.data.detail;
       }
-
       toast.error(errorMsg);
     },
   });
@@ -425,55 +399,32 @@ export default function IssueDetailPage() {
   });
 
   const editMutation = useMutation({
-    mutationFn: (data) => issuesApi.update(id, data),
-    onSuccess: () => {
+    mutationFn: async (data) => {
+      return await issuesApi.update(id, data);
+    },
+    onSuccess: (response) => {
       queryClient.invalidateQueries(["issues", id]);
       setIsEditing(false);
       toast.success("Issue updated successfully!");
     },
     onError: (error) => {
-      console.error("Edit error:", error);
-      toast.error("Failed to update issue");
+      let errorMsg = "Failed to update issue";
+      if (error.response?.status === 403) {
+        errorMsg = "You don't have permission to edit this issue";
+      } else if (error.response?.status === 400) {
+        errorMsg = "Validation error: " + JSON.stringify(error.response.data);
+      } else if (error.response?.status === 404) {
+        errorMsg = "Issue not found";
+      }
+      toast.error(errorMsg);
     },
   });
+
+  // Comment mutations
   const commentMutation = useMutation({
     mutationFn: async (commentData) => {
-      try {
-        const response = await commentsApi.create(id, {
-          content: commentData.content,
-          visibility: commentData.visibility || "public",
-          attachments: commentData.attachments || [], // Pass attachments
-        });
-
-        return response;
-      } catch (error) {
-        console.error("DEBUG: Full error details:", {
-          status: error.response?.status,
-          data: error.response?.data,
-          message: error.message,
-          url: error.config?.url,
-          requestData: {
-            content: commentData.content,
-            visibility: commentData.visibility,
-            attachments: commentData.attachments,
-          },
-        });
-
-        // Show more detailed error message
-        if (error.response?.data) {
-          const errorData = error.response.data;
-          if (typeof errorData === "string") {
-            throw new Error(errorData);
-          } else if (errorData.detail) {
-            throw new Error(errorData.detail);
-          } else if (errorData.non_field_errors) {
-            throw new Error(errorData.non_field_errors[0]);
-          } else {
-            throw new Error(JSON.stringify(errorData));
-          }
-        }
-        throw error;
-      }
+      const response = await commentsApi.create(id, commentData);
+      return response;
     },
     onSuccess: () => {
       queryClient.invalidateQueries(["comments", id]);
@@ -481,20 +432,7 @@ export default function IssueDetailPage() {
     },
     onError: (error) => {
       console.error("Comment error:", error);
-
-      const errorMessage = error.message || "Failed to post comment";
-
-      if (error.response?.status === 500) {
-        toast.error("Server error. Check Django logs for details.");
-      } else if (error.response?.status === 403) {
-        toast.error("You don't have permission to comment on this issue");
-      } else if (error.response?.status === 404) {
-        toast.error("Issue not found");
-      } else if (error.response?.status === 400) {
-        toast.error(`Validation error: ${errorMessage}`);
-      } else {
-        toast.error(errorMessage);
-      }
+      toast.error("Failed to post comment");
     },
   });
 
@@ -523,15 +461,55 @@ export default function IssueDetailPage() {
     },
   });
 
-  // Handle edit comment
+  // Handle comment operations
   const handleEditComment = (commentId, newContent) => {
     editCommentMutation.mutate({ commentId, content: newContent });
   };
 
-  // Handle delete comment
   const handleDeleteComment = (commentId) => {
     if (window.confirm("Are you sure you want to delete this comment?")) {
       deleteCommentMutation.mutate(commentId);
+    }
+  };
+
+  const handlePostComment = async (content, files = []) => {
+    try {
+      const commentData = {
+        content,
+        visibility: commentVisibility,
+      };
+
+      const commentResponse = await commentsApi.create(id, commentData);
+      const comment = commentResponse.data;
+
+      if (files && files.length > 0) {
+        const uploadPromises = files.map(async (file) => {
+          try {
+            const response = await attachmentsApi.createForComment(
+              comment.id,
+              file
+            );
+            return response.data.id;
+          } catch (error) {
+            console.error("Error uploading attachment:", error);
+            return null;
+          }
+        });
+
+        await Promise.all(uploadPromises);
+      }
+
+      queryClient.invalidateQueries(["comments", id]);
+      queryClient.invalidateQueries(["attachments", id]);
+      toast.success("Comment posted successfully!");
+      return comment;
+    } catch (error) {
+      console.error("Error posting comment:", error);
+      toast.error(
+        "Failed to post comment: " +
+          (error.response?.data?.detail || error.message)
+      );
+      throw error;
     }
   };
 
@@ -540,10 +518,19 @@ export default function IssueDetailPage() {
     uploadMutation.mutate(file);
   };
 
-  // Check permissions
-  const isIssueCreator = user?.id === issueRes?.created_by?.id;
-  const isAssignedStaff = user?.id === issueRes?.assignee?.id;
-  const currentUserRole = userRole || user?.role;
+  // Get mentionable users for comment editor
+  const getMentionableUsers = (query) => {
+    if (!query) return mentionableUsers.slice(0, 5);
+    const lowerQuery = query.toLowerCase();
+    return mentionableUsers
+      .filter(
+        (u) =>
+          u.email?.toLowerCase().includes(lowerQuery) ||
+          u.first_name?.toLowerCase().includes(lowerQuery) ||
+          u.last_name?.toLowerCase().includes(lowerQuery)
+      )
+      .slice(0, 5);
+  };
 
   // Render role-specific buttons
   const renderActionButtons = () => {
@@ -565,8 +552,9 @@ export default function IssueDetailPage() {
                   statusMutation.mutate("client-approved");
                 }
               }}
+              className="flex items-center gap-2 text-xs sm:text-sm py-1.5 sm:py-2 px-2 sm:px-4"
             >
-              <CheckCircle size={16} className="mr-2" />
+              <CheckCircle size={14} className="w-3 h-3 sm:w-4 sm:h-4" />
               Confirm Resolution
             </Button>
           )}
@@ -578,6 +566,7 @@ export default function IssueDetailPage() {
                   statusMutation.mutate("reopen");
                 }
               }}
+              className="flex items-center gap-2 text-xs sm:text-sm py-1.5 sm:py-2 px-2 sm:px-4"
             >
               Reopen Issue
             </Button>
@@ -590,7 +579,11 @@ export default function IssueDetailPage() {
     if (currentUserRole === "manager") {
       return (
         <div className="flex flex-wrap gap-2">
-          <Button variant="primary" onClick={() => setAssignOpen(true)}>
+          <Button
+            variant="primary"
+            onClick={() => setAssignOpen(true)}
+            className="flex items-center gap-2 text-xs sm:text-sm py-1.5 sm:py-2 px-2 sm:px-4"
+          >
             Assign Staff
           </Button>
 
@@ -610,9 +603,9 @@ export default function IssueDetailPage() {
                 editMutation.mutate({ priority: newPriority.toLowerCase() });
               }
             }}
-            className="flex items-center gap-2"
+            className="flex items-center gap-2 text-xs sm:text-sm py-1.5 sm:py-2 px-2 sm:px-4"
           >
-            <Tag size={14} />
+            <Tag size={14} className="w-3 h-3 sm:w-4 sm:h-4" />
             Edit Priority
           </Button>
         </div>
@@ -637,9 +630,9 @@ export default function IssueDetailPage() {
                 prev === "internal" ? "public" : "internal"
               )
             }
-            className="flex items-center gap-2"
+            className="flex items-center gap-2 text-xs sm:text-sm py-1.5 sm:py-2 px-2 sm:px-4"
           >
-            <Lock size={14} />
+            <Lock size={14} className="w-3 h-3 sm:w-4 sm:h-4" />
             {commentVisibility === "internal"
               ? "Internal Mode"
               : "Add Internal Note"}
@@ -687,7 +680,7 @@ export default function IssueDetailPage() {
   const assigneeEmail = getEmail(issue.assignee);
 
   // Edit mode
-  if (isEditing && (currentUserRole === "manager" || isIssueCreator)) {
+  if (isEditing && canEditIssue()) {
     return (
       <motion.div
         initial={{ opacity: 0 }}
@@ -744,20 +737,20 @@ export default function IssueDetailPage() {
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="max-w-7xl mx-auto px-4 py-8"
+      className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-8"
     >
       {/* Header with back button and actions */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 mb-6 sm:mb-8">
         <button
           onClick={() => navigate(-1)}
-          className="flex items-center gap-2 text-gray-600 hover:text-teal-600"
+          className="flex items-center gap-2 text-gray-600 hover:text-teal-600 text-sm sm:text-base"
         >
-          <ArrowLeft size={20} /> Back
+          <ArrowLeft size={18} className="w-4 h-4 sm:w-5 sm:h-5" /> Back
         </button>
 
-        <div className="flex items-center gap-4">
-          {/* Edit button for creator and managers */}
-          {(isIssueCreator || currentUserRole === "manager") && (
+        <div className="flex flex-wrap items-center gap-2 sm:gap-4 mt-2 sm:mt-0">
+          {/* Edit button with status check */}
+          {canEditIssue() ? (
             <Button
               variant="secondary"
               onClick={() => {
@@ -765,10 +758,23 @@ export default function IssueDetailPage() {
                 setEditTitle(issue.title);
                 setEditDesc(issue.description);
               }}
-              className="flex items-center gap-2"
+              className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm py-1.5 sm:py-2 px-2 sm:px-4"
             >
-              <Edit3 size={16} /> Edit
+              <Edit3 size={14} className="w-3 h-3 sm:w-4 sm:h-4" /> Edit
             </Button>
+          ) : (
+            <div className="relative group">
+              <Button
+                variant="secondary"
+                disabled
+                className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm py-1.5 sm:py-2 px-2 sm:px-4 opacity-50 cursor-not-allowed"
+              >
+                <Edit3 size={14} className="w-3 h-3 sm:w-4 sm:h-4" /> Edit
+              </Button>
+              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-800 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap z-10 pointer-events-none">
+                {getEditRestrictionMessage()}
+              </div>
+            </div>
           )}
 
           {/* Role-specific action buttons */}
@@ -776,20 +782,20 @@ export default function IssueDetailPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
         {/* Main content - left column */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="lg:col-span-2 space-y-4 sm:space-y-6">
           {/* Issue header card */}
-          <div className="bg-white rounded-xl shadow-lg p-6">
-            <div className="flex justify-between items-start gap-4">
-              <div>
-                <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">
+          <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start gap-3 sm:gap-4">
+              <div className="w-full">
+                <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 mb-2 break-words">
                   {issue.title}
                 </h1>
 
-                <div className="flex flex-wrap items-center gap-3">
+                <div className="flex flex-wrap items-center gap-2">
                   <span
-                    className={`px-3 py-1 rounded-full text-sm font-medium ${
+                    className={`px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-medium ${
                       issue.status === "open"
                         ? "bg-red-100 text-red-700"
                         : issue.status === "in_progress" ||
@@ -812,7 +818,7 @@ export default function IssueDetailPage() {
 
                   {issue.priority && (
                     <span
-                      className={`px-3 py-1 rounded-full text-sm font-medium ${
+                      className={`px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-medium ${
                         issue.priority === "low"
                           ? "bg-blue-100 text-blue-700"
                           : issue.priority === "medium"
@@ -826,7 +832,7 @@ export default function IssueDetailPage() {
                     </span>
                   )}
 
-                  <span className="text-sm text-gray-500">
+                  <span className="text-xs sm:text-sm text-gray-500">
                     Created by {creatorDisplayName}
                   </span>
                 </div>
@@ -846,29 +852,29 @@ export default function IssueDetailPage() {
           </div>
 
           {/* Original issue description */}
-          <div className="bg-white rounded-xl shadow-lg p-6">
-            <div className="flex gap-4">
-              <div className="w-12 h-12 bg-teal-500 rounded-full flex items-center justify-center text-white font-bold text-lg">
+          <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6">
+            <div className="flex gap-3 sm:gap-4">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-teal-500 rounded-full flex items-center justify-center text-white font-bold text-lg">
                 {getUserInitials(creatorDisplayName)}
               </div>
 
               <div className="flex-1">
-                <div className="flex items-center gap-3 mb-3">
-                  <span className="font-semibold text-gray-900">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 mb-3">
+                  <span className="font-semibold text-gray-900 text-sm sm:text-base">
                     {creatorDisplayName}
                   </span>
                   {creatorEmail && creatorEmail !== creatorDisplayName && (
-                    <span className="text-sm text-gray-500">
+                    <span className="text-xs sm:text-sm text-gray-500">
                       ({creatorEmail})
                     </span>
                   )}
-                  <span className="text-sm text-gray-500">
+                  <span className="text-xs sm:text-sm text-gray-500">
                     opened on {formatDate(issue.created_at)}
                   </span>
                 </div>
 
                 <div className="prose prose-gray max-w-none">
-                  <p className="text-gray-700 whitespace-pre-wrap">
+                  <p className="text-gray-700 whitespace-pre-wrap text-sm sm:text-base">
                     {issue.description}
                   </p>
                 </div>
@@ -877,7 +883,7 @@ export default function IssueDetailPage() {
           </div>
 
           {/* Comments section */}
-          <div className="bg-white rounded-xl shadow-lg p-6">
+          <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">
               Comments ({sortedComments.length})
               {commentsError && commentsError.response?.status !== 404 && (
@@ -928,9 +934,9 @@ export default function IssueDetailPage() {
         </div>
 
         {/* Sidebar - right column */}
-        <div className="space-y-6">
+        <div className="space-y-4 sm:space-y-6">
           {/* Assignee card */}
-          <div className="bg-white rounded-xl shadow-lg p-6">
+          <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
               <User size={18} /> Assignee
             </h3>
@@ -962,7 +968,7 @@ export default function IssueDetailPage() {
               <Button
                 variant="secondary"
                 onClick={() => setAssignOpen(true)}
-                className="w-full mt-4"
+                className="w-full mt-4 text-sm py-2"
               >
                 {assigneeDisplayName && assigneeDisplayName !== "Unknown"
                   ? "Reassign Staff"
@@ -972,7 +978,7 @@ export default function IssueDetailPage() {
           </div>
 
           {/* Attachments card */}
-          <div className="bg-white rounded-xl shadow-lg p-6">
+          <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
               <Paperclip size={18} /> Attachments (
               {allAttachments.length + selectedFiles.length})
@@ -996,7 +1002,6 @@ export default function IssueDetailPage() {
             )}
 
             <div className="mt-4 space-y-2">
-              {/* Show selected files that are pending upload */}
               {selectedFiles.length > 0 && (
                 <>
                   {selectedFiles.map((file, index) => (
@@ -1025,7 +1030,6 @@ export default function IssueDetailPage() {
                 </>
               )}
 
-              {/* Show uploaded attachments */}
               {allAttachments.length > 0
                 ? allAttachments.map((attachment, index) => {
                     const isImage =
@@ -1061,14 +1065,9 @@ export default function IssueDetailPage() {
                         </div>
 
                         <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                 
                           {isImage && (
                             <button
                               onClick={() => {
-                                console.log(
-                                  "Opening image modal for attachment:",
-                                  attachment.id
-                                );
                                 setSelectedImage({ id: attachment.id });
                               }}
                               className="text-teal-600 hover:text-teal-700 p-1"
@@ -1077,46 +1076,21 @@ export default function IssueDetailPage() {
                               <ImageIcon size={16} />
                             </button>
                           )}
-                          {/* And update the ImageModal usage: */}
-                          {selectedImage?.id && (
-                            <ImageModal
-                              attachmentId={selectedImage.id}
-                              onClose={() => setSelectedImage(null)}
-                            />
-                          )}
                           <button
-                            onClick={async () => {
-                              try {
-                                // Use axiosClient for authenticated download
-                                const response = await attachmentsApi.download(
-                                  attachment.id
-                                );
-
-                                // Create blob URL
-                                const url = window.URL.createObjectURL(
-                                  response.data
-                                );
-                                const link = document.createElement("a");
-                                link.href = url;
-                                link.download =
-                                  attachment.filename || "download";
-                                document.body.appendChild(link);
-                                link.click();
-
-                                // Cleanup
-                                setTimeout(() => {
-                                  document.body.removeChild(link);
-                                  window.URL.revokeObjectURL(url);
-                                }, 100);
-                              } catch (error) {
-                                console.error("Download error:", error);
-                                toast.error("Failed to download file");
-                              }
-                            }}
+                            onClick={() => handleDownloadAttachment(attachment)}
                             className="text-teal-600 hover:text-teal-700 p-1"
                             title="Download"
                           >
                             <Download size={16} />
+                          </button>
+                          <button
+                            onClick={() =>
+                              handleDeleteAttachment(attachment.id)
+                            }
+                            className="text-red-600 hover:text-red-700 p-1"
+                            title="Delete"
+                          >
+                            <Trash2 size={16} />
                           </button>
                         </div>
                       </div>
@@ -1134,8 +1108,8 @@ export default function IssueDetailPage() {
             </div>
           </div>
 
-          {/* Details panel (GitHub-style) - FIXED POSITION */}
-          <div className="bg-white rounded-xl shadow-lg p-6">
+          {/* Details panel */}
+          <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">
               Details
             </h3>

@@ -66,17 +66,7 @@ export default function CommentEditor({ onPost, issueId, visibility, onVisibilit
       {/* Controls */}
       <div className="flex justify-between items-center">
         <div className="flex gap-2">
-          <label className="cursor-pointer flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
-            <Paperclip size={16} />
-            <span className="text-sm">Attach files</span>
-            <input
-              type="file"
-              multiple
-              onChange={handleFileSelect}
-              className="hidden"
-              accept="image/*,.pdf,.doc,.docx,.txt"
-            />
-          </label>
+          
         </div>
         
         <button
