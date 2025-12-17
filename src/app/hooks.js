@@ -3,48 +3,31 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { authApi } from "../api/authApi.js";
 import toast from "react-hot-toast";
+import { useQuery } from "@tanstack/react-query";
 
 export const useAuth = () => {
   const navigate = useNavigate();
-  const [user, setUser] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    const token = localStorage.getItem("access_token");
-
-    if (!token) {
-      setIsLoading(false);
-      setUser(null);
-      return;
-    }
-
-    // Fetch user profile
-    authApi
-      .me()
-      .then((res) => {
-        setUser(res.data);
-        setIsLoading(false);
-      })
-      .catch(() => {
-        // Token invalid → clear everything
-        localStorage.removeItem("access_token");
-        localStorage.removeItem("refresh_token");
-        localStorage.removeItem("user_role");
-        localStorage.removeItem("user_profile");
-        setUser(null);
-        setIsLoading(false);
-        navigate("/login", { replace: true });
-      });
-  }, [navigate]);
+  // Use React Query to cache user data
+  const {
+    data: user,
+    isLoading,
+    error,
+  } = useQuery({
+    queryKey: ["user-profile"],
+    queryFn: () => authApi.me().then((res) => res.data),
+    enabled: !!localStorage.getItem("access_token"),
+    retry: 1,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
 
   const logout = () => {
+    authApi.logout();
     localStorage.removeItem("access_token");
     localStorage.removeItem("refresh_token");
     localStorage.removeItem("user_role");
     localStorage.removeItem("user_profile");
-    setUser(null);
     toast.success("Logged out");
-    // navigate("/login", { replace: true });
   };
 
   return { user, isLoading, logout };
