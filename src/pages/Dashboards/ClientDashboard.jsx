@@ -15,7 +15,6 @@ import {
   Clock,
   CheckCircle,
   ChevronDown,
-  RotateCcw,
 } from "lucide-react";
 import Chart from "react-apexcharts";
 import { useState } from "react";
@@ -45,21 +44,21 @@ export default function ClientDashboard() {
     );
   });
 
-  // Status counts - handle both 'in_progress' and 'in-progress'
+  // Status counts - ONLY 4 STATUSES NOW
   const open = issues.filter((i) => i.status === "open").length;
-  const inProgress = issues.filter(
-    (i) => i.status === "in_progress" || i.status === "in-progress"
-  ).length;
+  const inProgress = issues.filter((i) => i.status === "in_progress").length;
   const resolved = issues.filter((i) => i.status === "resolved").length;
   const closed = issues.filter((i) => i.status === "closed").length;
-  const reopen = issues.filter((i) => i.status === "reopen").length;
 
-  // Pie chart with ALL 5 statuses
+  // NEW: Calculate feedback count (if you have feedback API)
+  const feedbackCount = 0; // Replace with actual feedback count if available
+
+  // Pie chart with 4 statuses
   const pieOptions = {
-    series: [open, inProgress, resolved, closed, reopen],
-    colors: ["#ef4444", "#f59e0b", "#3b82f6", "#10b981", "#8b5cf6"],
+    series: [open, inProgress, resolved, closed], // REMOVED: reopen
+    colors: ["#ef4444", "#f59e0b", "#3b82f6", "#10b981"], // REMOVED: purple color
     chart: { type: "donut", height: 300 },
-    labels: ["Open", "In Progress", "Resolved", "Closed", "Reopen"],
+    labels: ["Open", "In Progress", "Resolved", "Closed"], // REMOVED: "Reopen"
     legend: {
       position: "bottom",
       fontSize: "14px",
@@ -211,8 +210,8 @@ export default function ClientDashboard() {
         </div>
       </div>
 
-      {/* 6 CARDS */}
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-6">
+      {/* 5 CARDS NOW (was 6) */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
         <div className="bg-white rounded-2xl shadow-lg p-6 border text-center">
           <AlertCircle size={40} className="mx-auto text-red-500 mb-3" />
           <p className="text-4xl font-bold text-red-600">{open}</p>
@@ -237,15 +236,10 @@ export default function ClientDashboard() {
           <p className="text-slate-600">Closed</p>
         </div>
 
+        {/* CHANGED: Replaced Reopen with Feedback/Total */}
         <div className="bg-white rounded-2xl shadow-lg p-6 border text-center">
-          <RotateCcw size={40} className="mx-auto text-purple-500 mb-3" />
-          <p className="text-4xl font-bold text-purple-600">{reopen}</p>
-          <p className="text-slate-600">Reopened</p>
-        </div>
-
-        <div className="bg-white rounded-2xl shadow-lg p-6 border text-center">
-          <Clock size={40} className="mx-auto text-blue-500 mb-3" />
-          <p className="text-4xl font-bold text-blue-600">{issues.length}</p>
+          <AlertCircle size={40} className="mx-auto text-teal-500 mb-3" />
+          <p className="text-4xl font-bold text-teal-600">{issues.length}</p>
           <p className="text-slate-600">Total Issues</p>
         </div>
       </div>
@@ -264,7 +258,6 @@ export default function ClientDashboard() {
           />
         </div>
 
-        {/* RESTORED: Original line graph */}
         <div className="bg-white rounded-3xl shadow-lg p-8 border">
           <h3 className="text-2xl font-bold text-slate-800 mb-6">
             Issues This Week
@@ -330,20 +323,16 @@ export default function ClientDashboard() {
                     className={`px-5 py-2 rounded-full text-sm font-bold ${
                       issue.status === "open"
                         ? "bg-red-100 text-red-700"
-                        : issue.status === "in-progress" ||
-                          issue.status === "in_progress"
+                        : issue.status === "in_progress"
                         ? "bg-amber-100 text-amber-700"
                         : issue.status === "resolved"
                         ? "bg-blue-100 text-blue-700"
                         : issue.status === "closed"
                         ? "bg-emerald-100 text-emerald-700"
-                        : "bg-purple-100 text-purple-700"
+                        : "bg-gray-100 text-gray-700"
                     }`}
                   >
-                    {issue.status
-                      ?.replace(/_/g, " ")
-                      .replace(/-/g, " ")
-                      .toUpperCase()}
+                    {issue.status?.replace(/_/g, " ").toUpperCase()}
                   </span>
                 </div>
               </div>
