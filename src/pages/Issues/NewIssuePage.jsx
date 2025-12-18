@@ -27,7 +27,7 @@ export default function NewIssuePage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["issues"] });
       queryClient.resetQueries({ queryKey: ["issues"] }); // ← THIS FORCES FRESH DATA
-      toast.success("Issue created successfully!");
+      toast.success("Issue created! Managers have been notified.");
       navigate("/app/issues");
     },
     onError: (err) => {

@@ -16,6 +16,7 @@ import { useUIStore } from "../../app/store/uiStore.js";
 import Footer from "./Footer";
 import toast from "react-hot-toast";
 import { useAuth } from "../../app/hooks.js";
+import NotificationBell from "../Notifications/NotificationBell";
 export default function AppShell() {
   const { user, isLoading, logout } = useAuth();
   const navigate = useNavigate();
@@ -139,9 +140,7 @@ const menuConfig = {
             {menuItems.find((i) => currentPath.startsWith(i.path))?.label ||
               "CFITP"}
           </h2>
-          <button className="p-2 hover:bg-gray-800 rounded-lg">
-            <Bell size={20} />
-          </button>
+          <NotificationBell />
         </header>
         <main className="flex-1 p-6 bg-gray-50">
           <Outlet />
