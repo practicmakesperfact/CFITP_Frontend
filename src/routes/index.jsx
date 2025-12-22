@@ -1,9 +1,11 @@
 
-import { createBrowserRouter, Navigate } from "react-router-dom";
+import { createBrowserRouter } from "react-router-dom";
 import ProtectedRoute from "./ProtectedRoute";
 import RoleRoute from "./RoleRoute";
 import DashboardRedirect from "../components/Dashboard/DashboardRedirect";
 import AppShell from "../components/Layout/AppShell";
+import HomeLayout from "../components/Layout/HomeLayout";
+import HomePage from "../pages/Home/HomePage";
 
 // Auth Pages
 import Login from "../pages/Auth/Login";
@@ -11,19 +13,17 @@ import Register from "../pages/Auth/Register";
 import ResetPassword from "../pages/Auth/ResetPassword";
 import RequestAccess from "../pages/Auth/RequestAccess";
 
-
 // Dashboard Pages
 import ClientDashboard from "../pages/Dashboards/ClientDashboard";
 import StaffDashboard from "../pages/Dashboards/StaffDashboard";
 import ManagerDashboard from "../pages/Dashboards/ManagerDashboard";
 import AdminDashboard from "../pages/Dashboards/AdminDashboard";
 
-// ADMIN PAGES - ADD THESE IMPORTS
-import UserManagement from "../pages/Admin/UserManagement"; 
+// Admin Pages
+import UserManagement from "../pages/Admin/UserManagement";
 import FeedbackAdmin from "../pages/Admin/FeedbackAdmin";
-import FeedbackDetailPage from "../pages/Admin/FeedbackDetailPage"; 
+import FeedbackDetailPage from "../pages/Admin/FeedbackDetailPage";
 import IssueHistoryPage from "../pages/Admin/IssueHistoryPage";
-
 
 // Other Pages
 import IssuesPage from "../pages/Issues/IssuesPage";
@@ -36,28 +36,35 @@ import ProfilePage from "../pages/Profile/ProfilePage";
 import ProfileEdit from "../pages/Profile/ProfileEdit";
 import ProfileViewer from "../pages/Profile/ProfileViewer";
 import UsersPage from "../pages/Users/UsersPage";
-import MyFeedback from './../pages/Feedback/MyFeedback';
+import MyFeedback from "./../pages/Feedback/MyFeedback";
 
 const router = createBrowserRouter([
+  // PUBLIC ROUTES (Home Layout)
   {
     path: "/",
-    element: <Navigate to="/login" replace />,
-  },
-  {
-    path: "/login",
-    element: <Login />,
-  },
-  {
-    path: "/register",
-    element: <Register />,
-  },
-  {
-    path: "/reset-password",
-    element: <ResetPassword />,
-  },
-  {
-    path: "/request-access",
-    element: <RequestAccess />,
+    element: <HomeLayout />,
+    children: [
+      {
+        index: true, // This is now the default home page
+        element: <HomePage />,
+      },
+      {
+        path: "login",
+        element: <Login />,
+      },
+      {
+        path: "register",
+        element: <Register />,
+      },
+      {
+        path: "reset-password",
+        element: <ResetPassword />,
+      },
+      {
+        path: "request-access",
+        element: <RequestAccess />,
+      },
+    ],
   },
 
   // PROTECTED APP LAYOUT
@@ -142,7 +149,8 @@ const router = createBrowserRouter([
           </RoleRoute>
         ),
       },
-      // ISSUES 
+
+      // ISSUES
       { path: "issues/new", element: <NewIssuePage /> },
       { path: "issues/:id", element: <IssueDetailPage /> },
       { path: "issues", element: <IssuesPage /> },
@@ -169,7 +177,7 @@ const router = createBrowserRouter([
       { path: "profile/edit", element: <ProfileEdit /> },
       { path: "profile/view", element: <ProfileViewer /> },
 
-      // USERS (Admin only) 
+      // USERS (Admin only)
       {
         path: "users",
         element: (
@@ -181,7 +189,7 @@ const router = createBrowserRouter([
     ],
   },
 
-  // 404 PAGE
+  // 404 PAGE (Updated to redirect to Home)
   {
     path: "*",
     element: (
@@ -194,10 +202,10 @@ const router = createBrowserRouter([
             The page you're looking for doesn't exist.
           </p>
           <button
-            onClick={() => (window.location.href = "/login")}
+            onClick={() => (window.location.href = "/")}
             className="bg-teal-600 hover:bg-teal-700 text-white font-medium py-2 px-6 rounded-xl"
           >
-            Go to Login
+            Go to Home
           </button>
         </div>
       </div>

@@ -22,7 +22,6 @@ export default function ProtectedRoute({ children }) {
       }
 
       try {
-       
         const userRes = await authApi.me();
         const user = userRes.data;
 
@@ -52,8 +51,8 @@ export default function ProtectedRoute({ children }) {
   }
 
   if (!isAuthenticated) {
-    // Redirect to login page with return url
-    return <Navigate to="/login" state={{ from: location.pathname }} replace />;
+    // Redirect to home page (not login) when not authenticated
+    return <Navigate to="/" state={{ from: location.pathname }} replace />;
   }
 
   return children;
