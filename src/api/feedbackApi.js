@@ -20,7 +20,30 @@ export const feedbackApi = {
   // Convert feedback to issue
   convert: (id, issueData) =>
     axiosClient.post(`/feedback/${id}/convert/`, issueData),
+  get: async (id) => {
+    const response = await axiosClient.get(`/feedback/${id}/`);
+    return response;
+  },
+  
+  delete: async (id) => {
+    const response = await axiosClient.delete(`/feedback/${id}/`);
+    return response;
+  },
 
   // Acknowledge feedback
   acknowledge: (id) => axiosClient.post(`/feedback/${id}/acknowledge/`),
+  listAll: async (params = {}) => {
+    const response = await axiosClient.get('/feedback/', { params });
+    return response;
+  },
+  
+  acknowledge: async (id) => {
+    const response = await axiosClient.post(`/feedback/${id}/acknowledge/`);
+    return response;
+  },
+  
+  convert: async (id, data) => {
+    const response = await axiosClient.post(`/feedback/${id}/convert/`, data);
+    return response;
+  }
 };

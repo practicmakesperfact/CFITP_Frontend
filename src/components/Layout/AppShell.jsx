@@ -58,13 +58,14 @@ export default function AppShell() {
     ],
 
     admin: [
-      { path: "/app/dashboard/admin", label: "Dashboard", icon: Home },
-      { path: "/app/issues", label: "All Issues", icon: Bug },
-      { path: "/app/reports", label: "Reports", icon: BarChart3 },
-      { path: "/app/notifications", label: "Notifications", icon: Bell },
-      { path: "/app/admin/users", label: "User Management", icon: Users }, // CHANGED THIS LINE
-      { path: "/app/profile", label: "Profile", icon: User },
-    ],
+    { path: "/app/dashboard/admin", label: "Dashboard", icon: Home },
+    { path: "/app/issues", label: "All Issues", icon: Bug },
+    { path: "/app/admin/feedback", label: "Feedback Admin", icon: MessageSquare },
+    { path: "/app/admin/users", label: "User Management", icon: Users },
+    { path: "/app/reports", label: "Reports", icon: BarChart3 },
+    { path: "/app/notifications", label: "Notifications", icon: Bell },
+    { path: "/app/profile", label: "Profile", icon: User },
+  ],
   };
 
   const menuItems = menuConfig[userRole] || menuConfig.client;

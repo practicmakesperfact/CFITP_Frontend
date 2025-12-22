@@ -180,6 +180,7 @@ import Register from "../pages/Auth/Register";
 import ResetPassword from "../pages/Auth/ResetPassword";
 import RequestAccess from "../pages/Auth/RequestAccess";
 
+
 // Dashboard Pages
 import ClientDashboard from "../pages/Dashboards/ClientDashboard";
 import StaffDashboard from "../pages/Dashboards/StaffDashboard";
@@ -187,8 +188,9 @@ import ManagerDashboard from "../pages/Dashboards/ManagerDashboard";
 import AdminDashboard from "../pages/Dashboards/AdminDashboard";
 
 // ADMIN PAGES - ADD THESE IMPORTS
-import UserManagement from "../pages/Admin/UserManagement"; // ADD THIS
-// import FeedbackAdmin from "../pages/Admin/FeedbackAdmin"; // For later use
+import UserManagement from "../pages/Admin/UserManagement"; 
+import FeedbackAdmin from "../pages/Admin/FeedbackAdmin";
+import FeedbackDetailPage from "../pages/Admin/FeedbackDetailPage"; 
 // import AttachmentsAdmin from "../pages/Admin/AttachmentsAdmin"; // For later use
 
 // Other Pages
@@ -284,23 +286,22 @@ const router = createBrowserRouter([
           </RoleRoute>
         ),
       },
-      // {
-      //   path: "admin/feedback",
-      //   element: (
-      //     <RoleRoute allowedRoles={["admin"]}>
-      //       <FeedbackAdmin /> {/* You'll create this later */}
-      //     </RoleRoute>
-      //   ),
-      // },
-      // {
-      //   path: "admin/attachments",
-      //   element: (
-      //     <RoleRoute allowedRoles={["admin"]}>
-      //       <AttachmentsAdmin /> {/* You'll create this later */}
-      //     </RoleRoute>
-      //   ),
-      // },
-
+            {
+        path: "admin/feedback",
+        element: (
+          <RoleRoute allowedRoles={["admin"]}>
+            <FeedbackAdmin />
+          </RoleRoute>
+        ),
+      },
+      {
+        path: "admin/feedback/:id",
+        element: (
+          <RoleRoute allowedRoles={["admin"]}>
+            <FeedbackDetailPage />
+          </RoleRoute>
+        ),
+      },
       // ISSUES (ORDER IS CRITICAL!)
       { path: "issues/new", element: <NewIssuePage /> },
       { path: "issues/:id", element: <IssueDetailPage /> },
