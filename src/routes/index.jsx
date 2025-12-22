@@ -191,6 +191,7 @@ import AdminDashboard from "../pages/Dashboards/AdminDashboard";
 import UserManagement from "../pages/Admin/UserManagement"; 
 import FeedbackAdmin from "../pages/Admin/FeedbackAdmin";
 import FeedbackDetailPage from "../pages/Admin/FeedbackDetailPage"; 
+import IssueHistoryPage from "../pages/Admin/IssueHistoryPage";
 // import AttachmentsAdmin from "../pages/Admin/AttachmentsAdmin"; // For later use
 
 // Other Pages
@@ -224,7 +225,7 @@ const router = createBrowserRouter([
     element: <ResetPassword />,
   },
   {
-    path: "/request-access" ,
+    path: "/request-access",
     element: <RequestAccess />,
   },
 
@@ -286,11 +287,19 @@ const router = createBrowserRouter([
           </RoleRoute>
         ),
       },
-            {
+      {
         path: "admin/feedback",
         element: (
           <RoleRoute allowedRoles={["admin"]}>
             <FeedbackAdmin />
+          </RoleRoute>
+        ),
+      },
+      {
+        path: "admin/issue-history",
+        element: (
+          <RoleRoute allowedRoles={["admin", "manager"]}>
+            <IssueHistoryPage />
           </RoleRoute>
         ),
       },

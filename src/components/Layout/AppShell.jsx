@@ -60,6 +60,7 @@ export default function AppShell() {
     admin: [
     { path: "/app/dashboard/admin", label: "Dashboard", icon: Home },
     { path: "/app/issues", label: "All Issues", icon: Bug },
+    { path: "/app/admin/issue-history", label: "Issue History", icon: BarChart3 },
     { path: "/app/admin/feedback", label: "Feedback Admin", icon: MessageSquare },
     { path: "/app/admin/users", label: "User Management", icon: Users },
     { path: "/app/reports", label: "Reports", icon: BarChart3 },
