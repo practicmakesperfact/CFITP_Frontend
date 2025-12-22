@@ -1,4 +1,4 @@
-// src/pages/Auth/Login.jsx
+
 import { useForm } from "react-hook-form";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link, useNavigate, useLocation } from "react-router-dom";
@@ -26,8 +26,8 @@ import {
 } from "lucide-react";
 
 // Import your company images
-import companyBackground from "../../assets/company-background.jpg"; // Main background
-import anrsLogo from "../../assets/image.jpg"; // Logo/decoration image
+import companyBackground from "../../assets/company-background.jpg"; 
+import anrsLogo from "../../assets/image.jpg"; 
 
 // Role options with icons
 const ROLE_OPTIONS = [
@@ -725,10 +725,6 @@ export default function Login() {
                         className="group-hover:translate-x-1 transition-transform"
                       />
                       <span>Sign In as {selectedRole.label}</span>
-                      <Sparkles
-                        size={16}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity"
-                      />
                     </>
                   )}
                 </motion.button>
@@ -764,11 +760,24 @@ export default function Login() {
                 className="mt-8 pt-6 border-t border-gray-100 text-center"
               >
                 <p className="text-gray-600 mb-4 font-medium">
+                  if You are new client ?
+                </p>
+                <Link
+                  to="/register"
+                  className="inline-flex items-center gap-3 px-8 py-3 bg-gradient-to-r"
+                >
+                  <span>Register here</span>
+                  <ChevronDown
+                    size={16}
+                    className="-rotate-90 group-hover:translate-x-1 transition-transform"
+                  />
+                </Link>
+                <p className="mt-4 text-gray-600 mb-4 font-medium">
                   New to ANRS ITB Portal?
                 </p>
                 <Link
                   to="/request-access"
-                  className="inline-flex items-center gap-3 px-8 py-3 bg-gradient-to-r from-blue-50 via-white to-teal-50 border-2 border-teal-200 text-teal-700 hover:text-teal-800 hover:border-teal-300 hover:from-blue-100 hover:to-teal-100 rounded-2xl font-semibold transition-all duration-300 shadow-lg hover:shadow-xl hover:shadow-teal-100 group"
+                  className=" inline-flex items-center gap-3 px-8 py-3 bg-gradient-to-r from-blue-50 via-white to-teal-50 border-2 border-teal-200 text-teal-700 hover:text-teal-800 hover:border-teal-300 hover:from-blue-100 hover:to-teal-100 rounded-2xl font-semibold transition-all duration-300 shadow-lg hover:shadow-xl hover:shadow-teal-100 group"
                 >
                   <span>Request Access to Portal</span>
                   <ChevronDown
@@ -776,6 +785,7 @@ export default function Login() {
                     className="-rotate-90 group-hover:translate-x-1 transition-transform"
                   />
                 </Link>
+
                 <p className="text-xs text-gray-500 mt-3">
                   Access requires verification and approval from ANRS ITB
                   administrators

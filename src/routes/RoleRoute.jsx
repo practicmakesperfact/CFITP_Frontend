@@ -1,4 +1,4 @@
-// src/routes/RoleRoute.jsx
+
 import { Navigate } from "react-router-dom";
 import { useUIStore } from "../app/store/uiStore";
 

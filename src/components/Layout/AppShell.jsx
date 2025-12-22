@@ -61,7 +61,7 @@ export default function AppShell() {
     { path: "/app/dashboard/admin", label: "Dashboard", icon: Home },
     { path: "/app/issues", label: "All Issues", icon: Bug },
     { path: "/app/admin/issue-history", label: "Issue History", icon: BarChart3 },
-    { path: "/app/admin/feedback", label: "Feedback Admin", icon: MessageSquare },
+    { path: "/app/admin/feedback", label: "User Feedback", icon: MessageSquare },
     { path: "/app/admin/users", label: "User Management", icon: Users },
     { path: "/app/reports", label: "Reports", icon: BarChart3 },
     { path: "/app/notifications", label: "Notifications", icon: Bell },
@@ -72,7 +72,7 @@ export default function AppShell() {
   const menuItems = menuConfig[userRole] || menuConfig.client;
 
   const safeLogout = () => {
-    // ONLY remove login data — KEEP ALL YOUR ISSUES, FEEDBACK, ETC.
+    // ONLY remove login data 
     localStorage.removeItem("access_token");
     localStorage.removeItem("refresh_token");
     localStorage.removeItem("user_role");

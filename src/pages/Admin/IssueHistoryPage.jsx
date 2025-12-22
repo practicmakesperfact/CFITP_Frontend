@@ -1,4 +1,4 @@
-
+// src/pages/Admin/IssueHistoryPage.jsx
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
@@ -18,6 +18,7 @@ import {
   Eye,
   ExternalLink,
   ArrowLeft,
+  Info,
 } from "lucide-react";
 import { formatDistanceToNow, format, subDays } from "date-fns";
 import * as XLSX from "xlsx";
@@ -37,15 +38,32 @@ export default function IssueHistoryPage() {
   const [selectedIssue, setSelectedIssue] = useState("all");
   const [selectedUser, setSelectedUser] = useState("all");
 
-  // Fetch data
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+
+  // Fetch data with pagination
   const fetchData = async () => {
     try {
       setLoading(true);
 
-      // Fetch issue history
-      const historyResponse = await issueHistoryApi.listAll();
+      // Fetch issue history with pagination
+      const params = {
+        page: currentPage,
+        page_size: pageSize,
+      };
+
+      const historyResponse = await issueHistoryApi.listAll(params);
       const historyData = historyResponse.results || historyResponse || [];
       setHistory(historyData);
+
+      // Set pagination info
+      setTotalCount(historyResponse.count || historyData.length);
+      setTotalPages(
+        Math.ceil((historyResponse.count || historyData.length) / pageSize)
+      );
 
       // Fetch issues for dropdown
       const issuesResponse = await issuesApi.listAll();
@@ -63,7 +81,7 @@ export default function IssueHistoryPage() {
     if (user?.role === "admin") {
       fetchData();
     }
-  }, [user]);
+  }, [user, currentPage, pageSize]);
 
   // Extract unique users and statuses for filters
   const users = [
@@ -123,9 +141,9 @@ export default function IssueHistoryPage() {
     );
   });
 
-  // Stats
+  // Calculate stats
   const stats = {
-    total: history.length,
+    total: totalCount,
     today: history.filter(
       (item) =>
         new Date(item.timestamp).toDateString() === new Date().toDateString()
@@ -133,9 +151,12 @@ export default function IssueHistoryPage() {
     week: history.filter(
       (item) => new Date(item.timestamp) >= subDays(new Date(), 7)
     ).length,
-    uniqueIssues: [...new Set(history.map((item) => item.issue?.id))].length,
-    uniqueUsers: [...new Set(history.map((item) => item.changed_by?.email))]
-      .length,
+    uniqueIssues: [
+      ...new Set(history.map((item) => item.issue?.id).filter(Boolean)),
+    ].length,
+    uniqueUsers: [
+      ...new Set(history.map((item) => item.changed_by?.email).filter(Boolean)),
+    ].length,
   };
 
   // Export to CSV
@@ -145,26 +166,59 @@ export default function IssueHistoryPage() {
       return;
     }
 
-    const exportData = filteredHistory.map((item) => ({
-      "Issue ID": item.issue?.id.substring(0, 8) || "N/A",
-      "Issue Title": item.issue?.title || "N/A",
-      "Changed By": item.changed_by?.email || "System",
-      "Old Status": item.old_status?.toUpperCase() || "N/A",
-      "New Status": item.new_status?.toUpperCase() || "N/A",
-      Timestamp: format(new Date(item.timestamp), "yyyy-MM-dd HH:mm:ss"),
-      "Time Since": formatDistanceToNow(new Date(item.timestamp), {
-        addSuffix: true,
-      }),
-    }));
+    try {
+      const exportData = filteredHistory.map((item) => ({
+        Timestamp: item.timestamp
+          ? format(new Date(item.timestamp), "yyyy-MM-dd HH:mm:ss")
+          : "N/A",
+        "Issue ID": item.issue?.id ? item.issue.id.substring(0, 8) : "N/A",
+        "Issue Title": item.issue?.title || "N/A",
+        "Changed By Email": item.changed_by?.email || "System",
+        "Changed By Name":
+          item.changed_by?.first_name && item.changed_by?.last_name
+            ? `${item.changed_by.first_name} ${item.changed_by.last_name}`
+            : item.changed_by?.email || "System",
+        "Changed By Role": item.changed_by?.role || "N/A",
+        "Old Status": item.old_status?.toUpperCase() || "N/A",
+        "New Status": item.new_status?.toUpperCase() || "N/A",
+        "Time Since": item.timestamp
+          ? formatDistanceToNow(new Date(item.timestamp), { addSuffix: true })
+          : "N/A",
+      }));
 
-    const worksheet = XLSX.utils.json_to_sheet(exportData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Issue History");
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
 
-    const fileName = `issue_history_${format(new Date(), "yyyy-MM-dd")}.xlsx`;
-    XLSX.writeFile(workbook, fileName);
+      // Auto-size columns
+      const maxWidth = exportData.reduce(
+        (w, r) => Math.max(w, r["Issue Title"].length),
+        10
+      );
+      worksheet["!cols"] = [
+        { wch: 20 }, // Timestamp
+        { wch: 10 }, // Issue ID
+        { wch: Math.min(maxWidth, 50) }, // Issue Title
+        { wch: 25 }, // Changed By Email
+        { wch: 20 }, // Changed By Name
+        { wch: 12 }, // Changed By Role
+        { wch: 12 }, // Old Status
+        { wch: 12 }, // New Status
+        { wch: 20 }, // Time Since
+      ];
 
-    toast.success(`Exported ${exportData.length} history records`);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Issue History");
+
+      const fileName = `issue_history_${format(
+        new Date(),
+        "yyyy-MM-dd_HH-mm"
+      )}.xlsx`;
+      XLSX.writeFile(workbook, fileName);
+
+      toast.success(`Exported ${exportData.length} records to ${fileName}`);
+    } catch (error) {
+      console.error("Export error:", error);
+      toast.error("Failed to export. Please try again.");
+    }
   };
 
   // Status badge component
@@ -193,7 +247,7 @@ export default function IssueHistoryPage() {
     }[status] || {
       color: "bg-gray-100 text-gray-800",
       icon: <AlertCircle size={14} />,
-      label: status?.toUpperCase(),
+      label: status?.toUpperCase() || "UNKNOWN",
     };
 
     return (
@@ -255,42 +309,79 @@ export default function IssueHistoryPage() {
         </div>
       </div>
 
-      {/* Stats Cards */}
+      {/* Stats Cards with Tooltips */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
-        <div className="bg-white p-4 rounded-xl shadow border border-gray-200">
+        {/* Total Records */}
+        <div className="bg-white p-4 rounded-xl shadow border border-gray-200 group relative">
           <div className="flex justify-between items-center">
             <div>
-              <p className="text-sm text-gray-600">Total History Records</p>
+              <div className="flex items-center gap-2">
+                <p className="text-sm text-gray-600">Total Records</p>
+                <div className="tooltip group">
+                  <Info size={14} className="text-gray-400 cursor-help" />
+                  <div className="absolute invisible group-hover:visible bg-gray-900 text-white text-xs rounded p-2 -top-10 left-0 w-48 z-10">
+                    Total number of status changes in the system
+                  </div>
+                </div>
+              </div>
               <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
             </div>
             <FileText className="text-gray-400" size={24} />
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-xl shadow border border-blue-100">
+        {/* Changes Today */}
+        <div className="bg-white p-4 rounded-xl shadow border border-blue-100 group relative">
           <div className="flex justify-between items-center">
             <div>
-              <p className="text-sm text-gray-600">Changes Today</p>
+              <div className="flex items-center gap-2">
+                <p className="text-sm text-gray-600">Changes Today</p>
+                <div className="tooltip group">
+                  <Info size={14} className="text-blue-400 cursor-help" />
+                  <div className="absolute invisible group-hover:visible bg-gray-900 text-white text-xs rounded p-2 -top-10 left-0 w-48 z-10">
+                    Status changes made in the last 24 hours
+                  </div>
+                </div>
+              </div>
               <p className="text-2xl font-bold text-blue-600">{stats.today}</p>
             </div>
             <Calendar className="text-blue-400" size={24} />
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-xl shadow border border-orange-100">
+        {/* Last 7 Days */}
+        <div className="bg-white p-4 rounded-xl shadow border border-orange-100 group relative">
           <div className="flex justify-between items-center">
             <div>
-              <p className="text-sm text-gray-600">Last 7 Days</p>
+              <div className="flex items-center gap-2">
+                <p className="text-sm text-gray-600">Last 7 Days</p>
+                <div className="tooltip group">
+                  <Info size={14} className="text-orange-400 cursor-help" />
+                  <div className="absolute invisible group-hover:visible bg-gray-900 text-white text-xs rounded p-2 -top-10 left-0 w-48 z-10">
+                    Weekly activity trend (shows system usage)
+                  </div>
+                </div>
+              </div>
               <p className="text-2xl font-bold text-orange-600">{stats.week}</p>
             </div>
             <TrendingUp className="text-orange-400" size={24} />
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-xl shadow border border-teal-100">
+        {/* Unique Issues - IMPORTANT */}
+        <div className="bg-white p-4 rounded-xl shadow border border-teal-100 group relative">
           <div className="flex justify-between items-center">
             <div>
-              <p className="text-sm text-gray-600">Unique Issues</p>
+              <div className="flex items-center gap-2">
+                <p className="text-sm text-gray-600">Unique Issues</p>
+                <div className="tooltip group">
+                  <Info size={14} className="text-teal-400 cursor-help" />
+                  <div className="absolute invisible group-hover:visible bg-gray-900 text-white text-xs rounded p-2 -top-10 left-0 w-48 z-10">
+                    Different issues with activity. High number = good issue
+                    coverage
+                  </div>
+                </div>
+              </div>
               <p className="text-2xl font-bold text-teal-600">
                 {stats.uniqueIssues}
               </p>
@@ -299,10 +390,19 @@ export default function IssueHistoryPage() {
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-xl shadow border border-purple-100">
+        {/* Users Involved - IMPORTANT */}
+        <div className="bg-white p-4 rounded-xl shadow border border-purple-100 group relative">
           <div className="flex justify-between items-center">
             <div>
-              <p className="text-sm text-gray-600">Users Involved</p>
+              <div className="flex items-center gap-2">
+                <p className="text-sm text-gray-600">Users Involved</p>
+                <div className="tooltip group">
+                  <Info size={14} className="text-purple-400 cursor-help" />
+                  <div className="absolute invisible group-hover:visible bg-gray-900 text-white text-xs rounded p-2 -top-10 left-0 w-48 z-10">
+                    Different users who made changes. Shows team engagement
+                  </div>
+                </div>
+              </div>
               <p className="text-2xl font-bold text-purple-600">
                 {stats.uniqueUsers}
               </p>
@@ -417,157 +517,269 @@ export default function IssueHistoryPage() {
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Timestamp
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Issue
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status Change
-                  </th>
-                  <th className="px6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Changed By
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {filteredHistory.map((item) => (
-                  <tr
-                    key={item.id}
-                    className="hover:bg-gray-50 transition-colors"
-                  >
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col">
-                        <span className="text-sm font-medium text-gray-900">
-                          {format(new Date(item.timestamp), "MMM dd, yyyy")}
-                        </span>
-                        <span className="text-xs text-gray-500">
-                          {format(new Date(item.timestamp), "HH:mm:ss")}
-                        </span>
-                        <span className="text-xs text-gray-400 mt-1">
-                          {formatDistanceToNow(new Date(item.timestamp), {
-                            addSuffix: true,
-                          })}
-                        </span>
-                      </div>
-                    </td>
-
-                    <td className="px-6 py-4">
-                      <div>
-                        <div className="font-medium text-gray-900 truncate max-w-xs">
-                          {item.issue?.title || "Issue Not Found"}
-                        </div>
-                        <div className="text-xs text-gray-500 font-mono mt-1">
-                          ID: {item.issue?.id?.substring(0, 8) || "N/A"}...
-                        </div>
-                      </div>
-                    </td>
-
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        {item.old_status ? (
-                          <>
-                            <StatusBadge status={item.old_status} />
-                            <span className="text-gray-400">→</span>
-                          </>
-                        ) : (
-                          <span className="text-gray-400 text-sm">Created</span>
-                        )}
-                        <StatusBadge status={item.new_status} />
-                      </div>
-                      {item.old_status && (
-                        <div className="text-xs text-gray-500 mt-2">
-                          From{" "}
-                          <span className="font-medium">
-                            {item.old_status.toUpperCase()}
-                          </span>{" "}
-                          to{" "}
-                          <span className="font-medium">
-                            {item.new_status.toUpperCase()}
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Timestamp
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Issue
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Status Change
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Changed By
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {filteredHistory.map((item) => (
+                    <tr
+                      key={item.id}
+                      className="hover:bg-gray-50 transition-colors"
+                    >
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col">
+                          <span className="text-sm font-medium text-gray-900">
+                            {item.timestamp
+                              ? format(new Date(item.timestamp), "MMM dd, yyyy")
+                              : "N/A"}
+                          </span>
+                          <span className="text-xs text-gray-500">
+                            {item.timestamp
+                              ? format(new Date(item.timestamp), "HH:mm:ss")
+                              : "N/A"}
+                          </span>
+                          <span className="text-xs text-gray-400 mt-1">
+                            {item.timestamp
+                              ? formatDistanceToNow(new Date(item.timestamp), {
+                                  addSuffix: true,
+                                })
+                              : "Unknown"}
                           </span>
                         </div>
-                      )}
-                    </td>
+                      </td>
 
-                    <td className="px-6 py-4">
-                      {item.changed_by ? (
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 bg-teal-100 rounded-full flex items-center justify-center">
-                            <User className="text-teal-600" size={14} />
+                      <td className="px-6 py-4">
+                        <div>
+                          <div className="font-medium text-gray-900 truncate max-w-xs">
+                            {item.issue?.title || "Issue Not Found"}
                           </div>
-                          <div>
-                            <p className="text-sm font-medium text-gray-900">
-                              {item.changed_by.email}
-                            </p>
-                            <p className="text-xs text-gray-500 capitalize">
-                              {item.changed_by.role || "User"}
-                            </p>
+                          <div className="text-xs text-gray-500 font-mono mt-1">
+                            ID: {item.issue?.id?.substring(0, 8) || "N/A"}...
                           </div>
                         </div>
-                      ) : (
-                        <span className="text-sm text-gray-500 italic">
-                          System
-                        </span>
-                      )}
-                    </td>
+                      </td>
 
-                    <td className="px-6 py-4">
-                      <div className="flex gap-2">
-                        {item.issue?.id && (
-                          <a
-                            href={`/app/issues/${item.issue.id}`}
-                            className="p-2 hover:bg-gray-100 rounded transition"
-                            title="View Issue"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            <Eye size={16} className="text-gray-600" />
-                          </a>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          {item.old_status ? (
+                            <>
+                              <StatusBadge status={item.old_status} />
+                              <span className="text-gray-400">→</span>
+                            </>
+                          ) : (
+                            <span className="text-gray-400 text-sm">
+                              Created
+                            </span>
+                          )}
+                          <StatusBadge status={item.new_status} />
+                        </div>
+                        {item.old_status && (
+                          <div className="text-xs text-gray-500 mt-2">
+                            From{" "}
+                            <span className="font-medium">
+                              {item.old_status.toUpperCase()}
+                            </span>{" "}
+                            to{" "}
+                            <span className="font-medium">
+                              {item.new_status.toUpperCase()}
+                            </span>
+                          </div>
                         )}
-                        <button
-                          onClick={() => {
-                            const details = `
-Issue History Record
-------------------------
-ID: ${item.id}
-Timestamp: ${format(new Date(item.timestamp), "PPP pp")}
-Issue: ${item.issue?.title || "N/A"}
-Issue ID: ${item.issue?.id || "N/A"}
-Changed By: ${item.changed_by?.email || "System"}
-From Status: ${item.old_status || "N/A"}
-To Status: ${item.new_status}
-                            `.trim();
+                      </td>
 
-                            navigator.clipboard.writeText(details);
-                            toast.success("Details copied to clipboard");
-                          }}
-                          className="p-2 hover:bg-gray-100 rounded transition"
-                          title="Copy Details"
-                        >
-                          <FileText size={16} className="text-teal-600" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                      <td className="px-6 py-4">
+                        {item.changed_by ? (
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 bg-teal-100 rounded-full flex items-center justify-center">
+                              <User className="text-teal-600" size={14} />
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-gray-900">
+                                {item.changed_by.email || "Unknown User"}
+                              </p>
+                              {item.changed_by.first_name && (
+                                <p className="text-xs text-gray-500">
+                                  {item.changed_by.first_name}{" "}
+                                  {item.changed_by.last_name || ""}
+                                </p>
+                              )}
+                              <p className="text-xs text-gray-500 capitalize">
+                                {item.changed_by.role || "User"}
+                              </p>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
+                              <Clock className="text-gray-600" size={14} />
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-gray-900">
+                                System
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                Automated action
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </td>
+
+                      <td className="px-6 py-4">
+                        <div className="flex gap-2">
+                          {item.issue?.id && (
+                            <a
+                              href={`/app/issues/${item.issue.id}`}
+                              className="p-2 hover:bg-gray-100 rounded transition"
+                            >
+                              <Eye size={18} />
+                            </a>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="border-t border-gray-200 px-6 py-4">
+                <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+                  <div className="text-sm text-gray-500">
+                    Showing {(currentPage - 1) * pageSize + 1} to{" "}
+                    {Math.min(currentPage * pageSize, totalCount)} of{" "}
+                    {totalCount} records
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {/* Previous Button */}
+                    <button
+                      onClick={() =>
+                        setCurrentPage((prev) => Math.max(1, prev - 1))
+                      }
+                      disabled={currentPage === 1}
+                      className={`px-4 py-2 rounded-lg flex items-center gap-2 ${
+                        currentPage === 1
+                          ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                          : "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"
+                      }`}
+                    >
+                      <ChevronDown size={16} className="transform rotate-90" />
+                      Previous
+                    </button>
+
+                    {/* Page Numbers */}
+                    <div className="flex items-center gap-1">
+                      {Array.from(
+                        { length: Math.min(5, totalPages) },
+                        (_, i) => {
+                          let pageNum;
+                          if (totalPages <= 5) {
+                            pageNum = i + 1;
+                          } else if (currentPage <= 3) {
+                            pageNum = i + 1;
+                          } else if (currentPage >= totalPages - 2) {
+                            pageNum = totalPages - 4 + i;
+                          } else {
+                            pageNum = currentPage - 2 + i;
+                          }
+
+                          return (
+                            <button
+                              key={pageNum}
+                              onClick={() => setCurrentPage(pageNum)}
+                              className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                                currentPage === pageNum
+                                  ? "bg-teal-600 text-white"
+                                  : "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"
+                              }`}
+                            >
+                              {pageNum}
+                            </button>
+                          );
+                        }
+                      )}
+
+                      {totalPages > 5 && currentPage < totalPages - 2 && (
+                        <>
+                          <span className="px-2 text-gray-400">...</span>
+                          <button
+                            onClick={() => setCurrentPage(totalPages)}
+                            className="w-10 h-10 rounded-lg bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 flex items-center justify-center"
+                          >
+                            {totalPages}
+                          </button>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Next Button */}
+                    <button
+                      onClick={() =>
+                        setCurrentPage((prev) => Math.min(totalPages, prev + 1))
+                      }
+                      disabled={currentPage === totalPages}
+                      className={`px-4 py-2 rounded-lg flex items-center gap-2 ${
+                        currentPage === totalPages
+                          ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                          : "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"
+                      }`}
+                    >
+                      Next
+                      <ChevronDown size={16} className="transform -rotate-90" />
+                    </button>
+
+                    {/* Page Size Selector */}
+                    <div className="ml-4">
+                      <select
+                        value={pageSize}
+                        onChange={(e) => {
+                          setPageSize(Number(e.target.value));
+                          setCurrentPage(1);
+                        }}
+                        className="px-3 py-2 border border-gray-300 rounded-lg bg-white text-sm"
+                      >
+                        <option value="10">10 per page</option>
+                        <option value="25">25 per page</option>
+                        <option value="50">50 per page</option>
+                        <option value="100">100 per page</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
 
-      {/* Summary */}
-      <div className="mt-6 flex justify-between items-center text-sm text-gray-500">
+      {/* Summary Footer */}
+      <div className="mt-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 text-sm text-gray-500">
         <div>
-          Showing {filteredHistory.length} of {history.length} history records
+          Showing {filteredHistory.length} records on this page
+          {totalCount > filteredHistory.length &&
+            ` (filtered from ${totalCount} total)`}
         </div>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">

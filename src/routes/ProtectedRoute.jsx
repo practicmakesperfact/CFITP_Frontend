@@ -1,4 +1,4 @@
-// src/routes/ProtectedRoute.jsx
+
 import { useEffect, useState } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { useUIStore } from "../app/store/uiStore";
@@ -22,7 +22,7 @@ export default function ProtectedRoute({ children }) {
       }
 
       try {
-        // Verify token by fetching user profile
+       
         const userRes = await authApi.me();
         const user = userRes.data;
 
