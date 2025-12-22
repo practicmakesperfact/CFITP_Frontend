@@ -1,4 +1,4 @@
-// src/pages/Reports/ReportsPage.jsx
+
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -73,6 +73,7 @@ import {
 import ChartCard from "../../components/Dashboard/ChartCard.jsx";
 import { useUIStore } from "../../app/store/uiStore.js";
 import { saveAs } from "file-saver";
+import * as XLSX from "xlsx"; 
 
 export default function ReportsPage() {
   const queryClient = useQueryClient();
@@ -213,11 +214,41 @@ export default function ReportsPage() {
           params.status = filters.status.join(",");
         }
 
+        console.log("Fetching analytics with params:", params);
+
         const response = await reportsApi.getAnalyticsData(params);
-        return response.data;
+
+        console.log("Analytics API Response:", response);
+
+        // Handle response structure
+        let analyticsData;
+        if (response.data && response.data.data !== undefined) {
+          analyticsData = response.data.data;
+        } else {
+          analyticsData = response.data;
+        }
+
+        console.log("Processed analytics data:", analyticsData);
+
+        if (!analyticsData) {
+          throw new Error("No data returned from API");
+        }
+
+        return analyticsData;
       } catch (err) {
         console.error("Error fetching analytics:", err);
-        toast.error("Failed to load analytics data");
+
+        // Check if it's an API response error
+        if (err.response?.data) {
+          toast.error(
+            err.response.data.message ||
+              err.response.data.error ||
+              "Failed to load analytics data"
+          );
+        } else {
+          toast.error("Failed to load analytics data");
+        }
+
         throw err;
       } finally {
         setLoading(false);
@@ -235,7 +266,10 @@ export default function ReportsPage() {
     refetch: refetchMetrics,
   } = useQuery({
     queryKey: ["realtime-metrics"],
-    queryFn: () => reportsApi.getRealtimeMetrics(),
+    queryFn: async () => {
+      const response = await reportsApi.getRealtimeMetrics();
+      return response.data;
+    },
     enabled: realTimeUpdates,
     refetchInterval: realTimeUpdates ? 10000 : false,
     staleTime: 0,
@@ -248,7 +282,10 @@ export default function ReportsPage() {
     refetch: refetchReports,
   } = useQuery({
     queryKey: ["generated-reports"],
-    queryFn: () => reportsApi.getReports(),
+    queryFn: async () => {
+      const response = await reportsApi.getReports();
+      return response.data;
+    },
     enabled: true,
   });
 
@@ -443,7 +480,9 @@ export default function ReportsPage() {
   // Quick export (sync)
   const handleQuickExport = async (format) => {
     try {
-      toast.loading(`Generating ${format.toUpperCase()} export...`);
+      toast.loading(`Generating ${format.toUpperCase()} export...`, {
+        id: "export-toast",
+      });
 
       const params = {
         start_date: startDate,
@@ -451,49 +490,132 @@ export default function ReportsPage() {
         report_type: reportType,
       };
 
-      let exportFunction;
-      let filename;
-      let contentType;
+      console.log("Export params:", params);
 
-      switch (format) {
-        case "excel":
-          exportFunction = reportsApi.exportExcel;
-          filename = `CFITP_Report_${reportType}_${format(
-            new Date(),
-            "yyyy-MM-dd"
-          )}.xlsx`;
-          contentType =
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-          break;
-        case "csv":
-          exportFunction = reportsApi.exportCSV;
-          filename = `CFITP_Report_${reportType}_${
+      if (format === "excel") {
+        // Use SheetJS for Excel export
+        if (!analyticsData) {
+          throw new Error("No data available for export");
+        }
+
+        // Create workbook
+        const wb = XLSX.utils.book_new();
+
+        // Summary sheet
+        const summaryData = [];
+        if (analyticsData.summary) {
+          summaryData.push(["CFITP Analytics Report"]);
+          summaryData.push([
+            `Period: ${analyticsData.period_display || "N/A"}`,
+          ]);
+          summaryData.push([
+            `Generated: ${new Date().toISOString().split("T")[0]}`,
+          ]);
+          summaryData.push([]);
+          summaryData.push(["Summary Metrics"]);
+          summaryData.push(["Metric", "Value"]);
+
+          Object.entries(analyticsData.summary).forEach(([key, value]) => {
+            summaryData.push([key.replace(/_/g, " ").toUpperCase(), value]);
+          });
+        }
+
+        const ws1 = XLSX.utils.aoa_to_sheet(summaryData);
+        XLSX.utils.book_append_sheet(wb, ws1, "Summary");
+
+        // Issues by Status sheet
+        if (
+          analyticsData.issues_by_status &&
+          analyticsData.issues_by_status.length > 0
+        ) {
+          const statusData = [
+            ["Issues by Status"],
+            ["Status", "Count", "Percentage"],
+          ];
+
+          analyticsData.issues_by_status.forEach((item) => {
+            statusData.push([
+              item.status.replace(/_/g, " ").toUpperCase(),
+              item.count,
+              item.percentage ? `${item.percentage}%` : "0%",
+            ]);
+          });
+
+          const ws2 = XLSX.utils.aoa_to_sheet(statusData);
+          XLSX.utils.book_append_sheet(wb, ws2, "Issues by Status");
+        }
+
+        // Issues by Priority sheet
+        if (
+          analyticsData.issues_by_priority &&
+          analyticsData.issues_by_priority.length > 0
+        ) {
+          const priorityData = [
+            ["Issues by Priority"],
+            ["Priority", "Count", "Percentage"],
+          ];
+
+          analyticsData.issues_by_priority.forEach((item) => {
+            priorityData.push([
+              item.priority.toUpperCase(),
+              item.count,
+              item.percentage ? `${item.percentage}%` : "0%",
+            ]);
+          });
+
+          const ws3 = XLSX.utils.aoa_to_sheet(priorityData);
+          XLSX.utils.book_append_sheet(wb, ws3, "Issues by Priority");
+        }
+
+        // Generate Excel file
+        const excelBuffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+        const blob = new Blob([excelBuffer], {
+          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        });
+
+        const filename = `CFITP_Report_${reportType}_${format(
+          new Date(),
+          "yyyy-MM-dd"
+        )}.xlsx`;
+        saveAs(blob, filename);
+
+        toast.success("Excel export completed!", { id: "export-toast" });
+      } else if (format === "csv") {
+        // Use reportsApi for CSV
+        const response = await reportsApi.exportCSV(params);
+
+        if (response.data && response.success) {
+          const blob = new Blob([response.data], { type: "text/csv" });
+          const filename = `CFITP_Report_${reportType}_${
             new Date().toISOString().split("T")[0]
           }.csv`;
-          contentType = "text/csv";
-          break;
-        case "json":
-          exportFunction = reportsApi.exportJSON;
-          filename = `CFITP_Report_${reportType}_${format(
+          saveAs(blob, filename);
+          toast.success("CSV export completed!", { id: "export-toast" });
+        } else {
+          throw new Error("CSV export failed");
+        }
+      } else if (format === "json") {
+        // Use reportsApi for JSON
+        const response = await reportsApi.exportJSON(params);
+
+        if (response.data && response.success) {
+          const blob = new Blob([response.data], { type: "application/json" });
+          const filename = `CFITP_Report_${reportType}_${format(
             new Date(),
             "yyyy-MM-dd"
           )}.json`;
-          contentType = "application/json";
-          break;
-        default:
-          throw new Error("Unsupported format");
+          saveAs(blob, filename);
+          toast.success("JSON export completed!", { id: "export-toast" });
+        } else {
+          throw new Error("JSON export failed");
+        }
       }
-
-      const response = await exportFunction(params);
-
-      // Handle blob response
-      const blob = new Blob([response.data], { type: contentType });
-      saveAs(blob, filename);
-
-      toast.success(`${format.toUpperCase()} export completed!`);
     } catch (error) {
       console.error("Export error:", error);
-      toast.error(`Export failed: ${error.message}`);
+      toast.error(`Export failed: ${error.message}`, {
+        id: "export-toast",
+        duration: 4000,
+      });
     }
   };
 
@@ -585,18 +707,23 @@ export default function ReportsPage() {
     const teamPerformance = {
       type: "bar",
       data: {
-        series: [
-          {
-            name: "Total Assigned",
-            data: teamPerformanceData.map(
-              (member) => member.total_assigned || 0
-            ),
-          },
-          {
-            name: "Resolved",
-            data: teamPerformanceData.map((member) => member.resolved || 0),
-          },
-        ],
+        series:
+          teamPerformanceData.length > 0
+            ? [
+                {
+                  name: "Total Assigned",
+                  data: teamPerformanceData.map(
+                    (member) => member.total_assigned || 0
+                  ),
+                },
+                {
+                  name: "Resolved",
+                  data: teamPerformanceData.map(
+                    (member) => member.resolved || 0
+                  ),
+                },
+              ]
+            : [],
         categories: teamPerformanceData.map(
           (member) => member.name || "Unknown"
         ),
@@ -609,12 +736,15 @@ export default function ReportsPage() {
     const resolutionTrend = {
       type: "area",
       data: {
-        series: [
-          {
-            name: "Daily Issues",
-            data: dailyTrend.map((day) => day.issues || 0),
-          },
-        ],
+        series:
+          dailyTrend.length > 0
+            ? [
+                {
+                  name: "Daily Issues",
+                  data: dailyTrend.map((day) => day.issues || 0),
+                },
+              ]
+            : [],
         categories: dailyTrend.map((day) => day.day_name || "Day"),
         colors: ["#8B5CF6"],
       },
@@ -624,12 +754,15 @@ export default function ReportsPage() {
     const satisfactionTrend = {
       type: "line",
       data: {
-        series: [
-          {
-            name: "Satisfaction Score",
-            data: dailyTrend.map((day) => day.feedback_avg || 0),
-          },
-        ],
+        series:
+          dailyTrend.length > 0
+            ? [
+                {
+                  name: "Satisfaction Score",
+                  data: dailyTrend.map((day) => day.feedback_avg || 0),
+                },
+              ]
+            : [],
         categories: dailyTrend.map((day) => day.day_name || "Day"),
         colors: ["#EC4899"],
       },
@@ -645,18 +778,29 @@ export default function ReportsPage() {
   };
 
   // Get metric value
- 
   const getMetricValue = (metricName) => {
     if (!analyticsData?.summary) return { value: 0, formatted: "0" };
 
     let rawValue = analyticsData.summary[metricName];
 
-    // Handle cases where backend returns string like "24.5h" or "92.3%"
-    if (typeof rawValue === "string") {
-      rawValue = parseFloat(rawValue.replace(/[^0-9.]/g, ""));
+    // Handle null/undefined
+    if (rawValue === null || rawValue === undefined || rawValue === "N/A") {
+      return { value: 0, formatted: "N/A" };
     }
 
-    if (rawValue === undefined || rawValue === null || isNaN(rawValue)) {
+    // Handle string values like "24.5h" or "92.3%"
+    if (typeof rawValue === "string") {
+      // Extract numeric value from string
+      const numericMatch = rawValue.match(/[0-9.]+/);
+      if (numericMatch) {
+        rawValue = parseFloat(numericMatch[0]);
+      } else {
+        rawValue = 0;
+      }
+    }
+
+    // Ensure it's a number
+    if (isNaN(rawValue)) {
       rawValue = 0;
     }
 
@@ -707,10 +851,10 @@ export default function ReportsPage() {
 
   // Load generated reports
   useEffect(() => {
-    if (reportsList?.data?.results) {
-      setGeneratedReports(reportsList.data.results);
-    } else if (reportsList?.data) {
-      setGeneratedReports(reportsList.data);
+    if (reportsList?.results) {
+      setGeneratedReports(reportsList.results);
+    } else if (reportsList) {
+      setGeneratedReports(reportsList);
     }
   }, [reportsList]);
 
@@ -881,7 +1025,7 @@ export default function ReportsPage() {
                         key={format}
                         onClick={() => handleQuickExport(format)}
                         className="w-full flex items-center justify-between px-3 py-2.5 text-sm hover:bg-gray-50 rounded-lg transition-colors"
-                        disabled={analyticsLoading}
+                        disabled={analyticsLoading || !analyticsData}
                       >
                         <div className="flex items-center gap-3">
                           <div className="p-1.5 bg-gray-100 rounded-lg">
@@ -900,7 +1044,7 @@ export default function ReportsPage() {
                         key={`gen-${format}`}
                         onClick={() => generateReport(format)}
                         className="w-full flex items-center justify-between px-3 py-2.5 text-sm hover:bg-gray-50 rounded-lg transition-colors"
-                        disabled={generating}
+                        disabled={generating || !analyticsData}
                       >
                         <div className="flex items-center gap-3">
                           <div className="p-1.5 bg-teal-100 rounded-lg">
@@ -990,6 +1134,7 @@ export default function ReportsPage() {
                   setStartDate(format(subDays(new Date(), 30), "yyyy-MM-dd"));
                   setEndDate(format(new Date(), "yyyy-MM-dd"));
                   setDateRange("month");
+                  refetchAnalytics();
                 }}
                 className="px-6 py-3 bg-teal-600 text-white rounded-lg font-medium hover:bg-teal-700 transition-colors"
               >
@@ -1000,7 +1145,7 @@ export default function ReportsPage() {
         )}
 
         {/* Main Content */}
-        {!isEmptyData && (
+        {!isEmptyData && analyticsData && (
           <div className="space-y-8">
             {/* Report Type Selection */}
             <motion.div
@@ -1486,8 +1631,15 @@ export default function ReportsPage() {
                         showHeader={false}
                       />
                     ) : (
-                      <div className="h-[300px] flex items-center justify-center text-gray-500">
-                        No status data available
+                      <div className="h-[300px] flex flex-col items-center justify-center text-gray-500 p-6">
+                        <PieChart className="w-16 h-16 text-gray-300 mb-4" />
+                        <p className="text-lg font-medium mb-2">
+                          No Status Data
+                        </p>
+                        <p className="text-sm text-gray-400 text-center">
+                          No issues with status data available for the selected
+                          period.
+                        </p>
                       </div>
                     )}
                   </div>
@@ -1528,8 +1680,15 @@ export default function ReportsPage() {
                         showHeader={false}
                       />
                     ) : (
-                      <div className="h-[300px] flex items-center justify-center text-gray-500">
-                        No priority data available
+                      <div className="h-[300px] flex flex-col items-center justify-center text-gray-500 p-6">
+                        <BarChart className="w-16 h-16 text-gray-300 mb-4" />
+                        <p className="text-lg font-medium mb-2">
+                          No Priority Data
+                        </p>
+                        <p className="text-sm text-gray-400 text-center">
+                          No issues with priority data available for the
+                          selected period.
+                        </p>
                       </div>
                     )}
                   </div>
@@ -1572,8 +1731,15 @@ export default function ReportsPage() {
                         showHeader={false}
                       />
                     ) : (
-                      <div className="h-[300px] flex items-center justify-center text-gray-500">
-                        No team performance data available
+                      <div className="h-[300px] flex flex-col items-center justify-center text-gray-500 p-6">
+                        <UsersIcon className="w-16 h-16 text-gray-300 mb-4" />
+                        <p className="text-lg font-medium mb-2">
+                          No Team Performance Data
+                        </p>
+                        <p className="text-sm text-gray-400 text-center">
+                          No team performance data available for the selected
+                          period.
+                        </p>
                       </div>
                     )}
                   </div>
@@ -1618,8 +1784,14 @@ export default function ReportsPage() {
                         showHeader={false}
                       />
                     ) : (
-                      <div className="h-[300px] flex items-center justify-center text-gray-500">
-                        No trend data available
+                      <div className="h-[300px] flex flex-col items-center justify-center text-gray-500 p-6">
+                        <TrendingUp className="w-16 h-16 text-gray-300 mb-4" />
+                        <p className="text-lg font-medium mb-2">
+                          No Trend Data
+                        </p>
+                        <p className="text-sm text-gray-400 text-center">
+                          No daily trend data available for the selected period.
+                        </p>
                       </div>
                     )}
                   </div>

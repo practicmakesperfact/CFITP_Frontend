@@ -23,51 +23,49 @@ export default function AppShell() {
   const location = useLocation();
   const { sidebarOpen, toggleSidebar, userRole } = useUIStore();
   const currentPath = location.pathname;
-    if (isLoading) {
-      return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50">
-          <div className="text-2xl font-semibold text-[#0EA5A4]">
-            Loading...
-          </div>
-        </div>
-      );
-    }
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-2xl font-semibold text-[#0EA5A4]">Loading...</div>
+      </div>
+    );
+  }
 
-    if (!user) {
-      navigate("/login", { replace: true });
-      return null;
-    }
-const menuConfig = {
-  client: [
-    { path: "/app/dashboard/client", label: "Dashboard", icon: Home },
-    { path: "/app/issues", label: "My Issues", icon: Bug },
-    { path: "/app/feedback", label: "Feedback", icon: MessageSquare },
-    { path: "/app/profile", label: "Profile", icon: User },
-  ],
+  if (!user) {
+    navigate("/login", { replace: true });
+    return null;
+  }
 
-  staff: [
-    { path: "/app/dashboard/staff", label: "Dashboard", icon: Home },
-    { path: "/app/issues", label: "Assigned Issues", icon: Bug },
-    { path: "/app/profile", label: "Profile", icon: User },
-  ],
+  const menuConfig = {
+    client: [
+      { path: "/app/dashboard/client", label: "Dashboard", icon: Home },
+      { path: "/app/issues", label: "My Issues", icon: Bug },
+      { path: "/app/feedback", label: "Feedback", icon: MessageSquare },
+      { path: "/app/profile", label: "Profile", icon: User },
+    ],
 
-  manager: [
-    { path: "/app/dashboard/manager", label: "Dashboard", icon: Home },
-    { path: "/app/issues", label: "All Issues", icon: Bug },
-    { path: "/app/reports", label: "Reports", icon: BarChart3 },
-    { path: "/app/profile", label: "Profile", icon: User },
-  ],
+    staff: [
+      { path: "/app/dashboard/staff", label: "Dashboard", icon: Home },
+      { path: "/app/issues", label: "Assigned Issues", icon: Bug },
+      { path: "/app/profile", label: "Profile", icon: User },
+    ],
 
-  admin: [
-    { path: "/app/dashboard/admin", label: "Dashboard", icon: Home },
-    { path: "/app/issues", label: "All Issues", icon: Bug },
-    { path: "/app/reports", label: "Reports", icon: BarChart3 },
-    { path: "/app/notifications", label: "Notifications", icon: Bell },
-    { path: "/app/users", label: "Users", icon: Users },
-    { path: "/app/profile", label: "Profile", icon: User },
-  ],
-};
+    manager: [
+      { path: "/app/dashboard/manager", label: "Dashboard", icon: Home },
+      { path: "/app/issues", label: "All Issues", icon: Bug },
+      { path: "/app/reports", label: "Reports", icon: BarChart3 },
+      { path: "/app/profile", label: "Profile", icon: User },
+    ],
 
+    admin: [
+      { path: "/app/dashboard/admin", label: "Dashboard", icon: Home },
+      { path: "/app/issues", label: "All Issues", icon: Bug },
+      { path: "/app/reports", label: "Reports", icon: BarChart3 },
+      { path: "/app/notifications", label: "Notifications", icon: Bell },
+      { path: "/app/admin/users", label: "User Management", icon: Users }, // CHANGED THIS LINE
+      { path: "/app/profile", label: "Profile", icon: User },
+    ],
+  };
 
   const menuItems = menuConfig[userRole] || menuConfig.client;
 
