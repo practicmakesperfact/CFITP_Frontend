@@ -39,8 +39,8 @@ export default function AppShell() {
   const menuConfig = {
     client: [
       { path: "/app/dashboard/client", label: "Dashboard", icon: Home },
-      { path: "/app/issues", label: "My Issues", icon: Bug },
-      { path: "/app/feedback", label: "Feedback", icon: MessageSquare },
+      { path: "/app/issues", label: "Report Issues", icon: Bug },
+      { path: "/app/feedback", label: "Submit Feedback", icon: MessageSquare },
       { path: "/app/profile", label: "Profile", icon: User },
     ],
 
