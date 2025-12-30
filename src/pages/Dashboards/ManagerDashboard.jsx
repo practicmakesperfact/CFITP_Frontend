@@ -1,4 +1,4 @@
-// src/pages/Dashboards/ManagerDashboard.jsx
+
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
@@ -12,6 +12,7 @@ import {
   ChevronDown,
   Users,
   UserCheck,
+  Filter,
 } from "lucide-react";
 import { subDays, isWithinInterval, formatDistanceToNow } from "date-fns";
 import Lottie from "lottie-react";
@@ -45,27 +46,37 @@ export default function ManagerDashboard() {
     return () => window.removeEventListener("storage", loadFeedback);
   }, []);
 
-  // Fetch all issues - FIXED: Properly defined issuesData
+  // Fetch all issues
   const { data: issuesData, isLoading: issuesLoading } = useQuery({
     queryKey: ["issues-all"],
     queryFn: () => issuesApi.listAll(),
   });
 
-  // Fetch REAL staff users from backend
+  // Fetch REAL staff users from backend - WITH DEBUG LOGGING
   const { data: staffData, isLoading: staffLoading } = useQuery({
     queryKey: ["staff-users"],
     queryFn: async () => {
       try {
-        // Try to fetch staff users from your backend
+        console.log("🔄 Fetching staff users from backend...");
         const response = await usersApi.getStaffUsers();
+
+        // DEBUG: Log what we get from API
+        console.log("📋 API Response:", response.data);
+        console.log("🔢 Number of users:", response.data.length);
+
+        // Log each user's role
+        response.data.forEach((user, index) => {
+          console.log(
+            `👤 User ${index + 1}: ${user.email} - Role: ${user.role} - Name: ${
+              user.first_name
+            } ${user.last_name}`
+          );
+        });
+
         return response.data;
       } catch (error) {
         console.error("Failed to fetch staff users:", error);
-        // Fallback: Check if we have any users in localStorage or return empty
-        const fallbackUsers = JSON.parse(
-          localStorage.getItem("cfitp_users") || "[]"
-        );
-        return fallbackUsers.filter((user) => user.role === "staff");
+        return [];
       }
     },
   });
@@ -78,9 +89,27 @@ export default function ManagerDashboard() {
     setFeedback(updated);
   };
 
-  // FIXED: Properly handle issuesData which might be undefined during loading
+  // Handle issues data
   const issues = issuesData?.results || [];
-  const staffUsers = staffData || [];
+
+  // ✅ CRITICAL FIX: Filter out managers - ONLY show role='staff'
+  const staffUsers = (staffData || []).filter((user) => {
+    const isStaff = user.role === "staff";
+    if (!isStaff) {
+      console.log(`❌ Filtered out: ${user.email} (Role: ${user.role})`);
+    }
+    return isStaff;
+  });
+
+  // Debug logging
+  useEffect(() => {
+    if (staffData) {
+      console.log("=== STAFF USERS DEBUG ===");
+      console.log("Total from API:", staffData.length);
+      console.log("After filtering (staff only):", staffUsers.length);
+      console.log("=== END DEBUG ===");
+    }
+  }, [staffData, staffUsers.length]);
 
   // Filter issues based on time filter
   const getFilteredIssues = () => {
@@ -153,6 +182,11 @@ export default function ManagerDashboard() {
             <span className="font-medium text-slate-700">
               {staffUsers.length} Staff Members
             </span>
+            {staffData && staffData.length > staffUsers.length && (
+              <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full">
+                Filtered: {staffData.length - staffUsers.length}
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-3 bg-white border border-gray-200 shadow-sm px-6 py-3 rounded-xl">
             <UserCog className="text-[#0EA5A4]" size={24} />
@@ -163,8 +197,13 @@ export default function ManagerDashboard() {
         </div>
       </div>
 
-      {/* Time Filter */}
-      <div className="flex justify-end">
+      {/* Filters Section */}
+      <div className="flex justify-between items-center">
+        <div className="flex items-center gap-3 bg-white border border-gray-200 rounded-xl px-4 py-2">
+          <Filter size={18} className="text-gray-500" />
+          <span className="text-sm text-gray-600">Showing: Staff only</span>
+        </div>
+
         <div className="relative">
           <select
             value={timeFilter}
@@ -213,7 +252,7 @@ export default function ManagerDashboard() {
 
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <ChartCard title="Issue Status Overview" type="line" data={pieData} />
+        <ChartCard title="Issue Status Overview" type="pie" data={pieData} />
         <ChartCard title="Issues This Week" type="line" data={weeklyData()} />
       </div>
 
@@ -223,11 +262,11 @@ export default function ManagerDashboard() {
           <h2 className="text-3xl font-bold text-slate-800">
             Unassigned Issues ({unassignedIssues.length})
           </h2>
-          {unassignedIssues.length > 4 && (
-            <p className="text-slate-500 text-sm flex items-center gap-2">
-              <ChevronDown size={16} />
-              Scroll to see more
-            </p>
+          {staffUsers.length === 0 && (
+            <div className="flex items-center gap-2 text-amber-600 bg-amber-50 px-4 py-2 rounded-lg">
+              <AlertCircle size={18} />
+              <span className="text-sm">No staff available to assign</span>
+            </div>
           )}
         </div>
 
@@ -258,9 +297,16 @@ export default function ManagerDashboard() {
                 <div className="flex gap-3">
                   <button
                     onClick={() => setAssignData(issue)}
-                    className="px-5 py-2 rounded-xl bg-[#0EA5A4] text-white hover:bg-teal-700 font-medium shadow transition-all hover:scale-105"
+                    disabled={staffUsers.length === 0}
+                    className={`px-5 py-2 rounded-xl font-medium shadow transition-all hover:scale-105 ${
+                      staffUsers.length === 0
+                        ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                        : "bg-[#0EA5A4] text-white hover:bg-teal-700"
+                    }`}
                   >
-                    Assign Staff
+                    {staffUsers.length === 0
+                      ? "No Staff Available"
+                      : "Assign Staff"}
                   </button>
                   <button
                     onClick={() => navigate(`/issues/${issue.id}`)}
@@ -318,7 +364,8 @@ export default function ManagerDashboard() {
                     className={`px-4 py-1.5 rounded-full text-sm font-bold ${
                       issue.status === "open"
                         ? "bg-red-100 text-red-700"
-                        : issue.status === "in-progress" || issue.status === "in_progress"
+                        : issue.status === "in-progress" ||
+                          issue.status === "in_progress"
                         ? "bg-amber-100 text-amber-700"
                         : "bg-emerald-100 text-emerald-700"
                     }`}
@@ -332,11 +379,44 @@ export default function ManagerDashboard() {
         )}
       </div>
 
+      {/* Debug Panel (Visible only in development) */}
+      {process.env.NODE_ENV === "development" && staffData && (
+        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+          <h3 className="font-semibold text-gray-700 mb-2">Debug Info:</h3>
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <p>
+                Total Users from API: <strong>{staffData.length}</strong>
+              </p>
+              <p>
+                Staff Users (filtered): <strong>{staffUsers.length}</strong>
+              </p>
+              <p>
+                Managers Filtered Out:{" "}
+                <strong>{staffData.length - staffUsers.length}</strong>
+              </p>
+            </div>
+            <div className="text-xs">
+              {staffData.map((u, i) => (
+                <div
+                  key={i}
+                  className={
+                    u.role === "staff" ? "text-green-600" : "text-red-600"
+                  }
+                >
+                  {u.email} ({u.role})
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Assign Modal */}
       {assignData && (
         <AssignModal
           issue={assignData}
-          staffUsers={staffUsers}
+          staffUsers={staffUsers} // Already filtered
           onClose={() => setAssignData(null)}
           onAssign={handleAssigned}
         />

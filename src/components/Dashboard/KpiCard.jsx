@@ -12,7 +12,7 @@ export default function KpiCard({ title, value, icon: Icon, color = "teal" }) {
     <motion.div
       whileHover={{ scale: 1.02 }}
       className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6"
-    >
+    > 
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm font-medium text-slate-500">{title}</p>
