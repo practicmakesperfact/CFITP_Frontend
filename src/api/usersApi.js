@@ -1,7 +1,9 @@
-
 import axiosClient from "./axiosClient";
 
 export const usersApi = {
+  /**
+   * Get all users (with optional filters)
+   */
   getAllUsers: async (params = {}) => {
     try {
       // Try admin endpoint first
@@ -49,14 +51,17 @@ export const usersApi = {
     }
   },
 
+  /**
+   * Get staff users
+   */
   getStaffUsers: async () => {
     try {
       console.log("📞 Calling /users/staff/ endpoint...");
       const response = await axiosClient.get("/users/staff/");
-      
+
       console.log("✅ Staff API Response status:", response.status);
       console.log("📦 Response data:", response.data);
-      
+
       // Check what's actually in the response
       if (Array.isArray(response.data)) {
         console.log(`📊 Array with ${response.data.length} items received`);
@@ -64,13 +69,14 @@ export const usersApi = {
           console.log(`User ${i}: ${user.email} - Role: ${user.role}`);
         });
       }
-      
+
       return response.data;
     } catch (error) {
       console.error("❌ Error:", error);
       return [];
     }
   },
+
   /**
    * Get user by ID with full details
    */
@@ -194,16 +200,32 @@ export const usersApi = {
   },
 
   /**
-   * Create a new user (admin only)
+   * Create a new user (admin can create any role)
    */
   createUser: async (userData) => {
     try {
       console.log("Creating new user:", userData);
 
-      // Use the register endpoint for creating users
-      const response = await axiosClient.post("/users/register/", userData);
-      console.log("Create user response:", response.data);
-      return response.data;
+      // First try admin create endpoint
+      try {
+        const response = await axiosClient.post(
+          "/users/admin/create/",
+          userData
+        );
+        console.log("Admin create user response:", response.data);
+        return response.data;
+      } catch (adminError) {
+        // If admin endpoint doesn't exist or fails, fall back to register endpoint
+        console.log(
+          "Admin endpoint failed, trying register endpoint:",
+          adminError
+        );
+
+        // Use the register endpoint for creating users
+        const response = await axiosClient.post("/users/register/", userData);
+        console.log("Create user response:", response.data);
+        return response.data;
+      }
     } catch (error) {
       console.error("Error creating user:", error);
 
@@ -298,26 +320,6 @@ export const usersApi = {
   // ============================================
   // FILTERED USER LISTS
   // ============================================
-
-  /**
-   * Get all staff users
-   */
-  getStaffUsers: async () => {
-    try {
-      const response = await axiosClient.get("/users/staff/");
-
-      if (Array.isArray(response.data)) {
-        return response.data;
-      } else if (response.data?.results) {
-        return response.data.results;
-      } else {
-        return response.data ? [response.data] : [];
-      }
-    } catch (error) {
-      console.error("Error fetching staff users:", error);
-      return [];
-    }
-  },
 
   /**
    * Get all client users
@@ -466,5 +468,18 @@ export const usersApi = {
       isValid: Object.keys(errors).length === 0,
       errors,
     };
+  },
+
+  /**
+   * Check if current user is admin
+   */
+  isCurrentUserAdmin: async () => {
+    try {
+      const currentUser = await usersApi.getCurrentUser();
+      return currentUser.role === "admin";
+    } catch (error) {
+      console.error("Error checking admin status:", error);
+      return false;
+    }
   },
 };
