@@ -33,8 +33,7 @@ import FeedbackPage from "../pages/Feedback/FeedbackPage";
 import ReportsPage from "../pages/Reports/ReportsPage";
 import NotificationsPage from "../pages/notifications/NotificationsPage";
 import ProfilePage from "../pages/Profile/ProfilePage";
-import ProfileEdit from "../pages/Profile/ProfileEdit";
-import ProfileViewer from "../pages/Profile/ProfileViewer";
+
 
 import MyFeedback from "./../pages/Feedback/MyFeedback";
 
@@ -174,8 +173,7 @@ const router = createBrowserRouter([
 
       // PROFILE
       { path: "profile", element: <ProfilePage /> },
-      { path: "profile/edit", element: <ProfileEdit /> },
-      { path: "profile/view", element: <ProfileViewer /> },
+      
 
     ],
   },
