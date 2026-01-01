@@ -30,5 +30,12 @@ export const useAuth = () => {
     toast.success("Logged out");
   };
 
-  return { user, isLoading, logout };
+  return {
+    user,
+    isLoading,
+    logout,
+    refetch: () => {
+      queryClient.invalidateQueries(["user-profile"]);
+    },
+  };
 };
