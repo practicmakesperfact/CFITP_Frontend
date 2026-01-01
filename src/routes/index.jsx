@@ -35,7 +35,7 @@ import NotificationsPage from "../pages/notifications/NotificationsPage";
 import ProfilePage from "../pages/Profile/ProfilePage";
 import ProfileEdit from "../pages/Profile/ProfileEdit";
 import ProfileViewer from "../pages/Profile/ProfileViewer";
-import UsersPage from "../pages/Users/UsersPage";
+
 import MyFeedback from "./../pages/Feedback/MyFeedback";
 
 const router = createBrowserRouter([
@@ -177,15 +177,6 @@ const router = createBrowserRouter([
       { path: "profile/edit", element: <ProfileEdit /> },
       { path: "profile/view", element: <ProfileViewer /> },
 
-      // USERS (Admin only)
-      {
-        path: "users",
-        element: (
-          <RoleRoute allowedRoles={["admin"]}>
-            <UsersPage />
-          </RoleRoute>
-        ),
-      },
     ],
   },
 
