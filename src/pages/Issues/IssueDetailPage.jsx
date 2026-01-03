@@ -19,6 +19,8 @@ import {
   Send,
   ImageIcon,
   Trash2,
+  UserCheck,
+  Info,
 } from "lucide-react";
 
 import { issuesApi } from "../../api/issuesApi.js";
@@ -49,6 +51,7 @@ export default function IssueDetailPage() {
   const [commentVisibility, setCommentVisibility] = useState("public");
   const [selectedImage, setSelectedImage] = useState(null);
   const [selectedFiles, setSelectedFiles] = useState([]);
+  const [isAssigning, setIsAssigning] = useState(false);
 
   const { userRole } = useUIStore();
   const { user: currentUser, isLoading: authLoading } = useAuth();
@@ -76,6 +79,7 @@ export default function IssueDetailPage() {
     data: issueRes,
     isLoading: issueLoading,
     error: issueError,
+    refetch: refetchIssue,
   } = useQuery({
     queryKey: ["issues", id],
     queryFn: () => issuesApi.retrieve(id).then((res) => res.data),
@@ -137,30 +141,71 @@ export default function IssueDetailPage() {
   const allAttachments =
     attachments.length > 0 ? attachments : issueAttachments;
 
-  // Fetch staff users for assignment
-  const { data: staffUsers = [] } = useQuery({
-    queryKey: ["staff-users"],
+  // Fetch staff users for assignment - FIXED: Only show staff role, not managers
+  const { data: staffUsers = [], isLoading: staffUsersLoading } = useQuery({
+    queryKey: ["staff-users-for-assignment", id],
     queryFn: async () => {
       try {
+        console.log("🔄 Fetching staff users for assignment...");
         const response = await axiosClient.get("/users/");
-        const users = response.data.results || response.data || [];
-        return users.filter((u) => u.role === "staff" || u.role === "manager");
+
+        // Handle different response formats
+        const data = response.data;
+        let users = [];
+
+        if (data && data.results) {
+          users = data.results;
+        } else if (Array.isArray(data)) {
+          users = data;
+        }
+
+        console.log(`📋 Total users from API: ${users.length}`);
+
+        // FIX: Filter ONLY staff users (not managers)
+        const staffOnly = users.filter((u) => {
+          const isStaff = u.role === "staff" && u.is_active !== false;
+          if (!isStaff) {
+            console.log(`❌ Filtered out (not staff): ${u.email} (${u.role})`);
+          }
+          return isStaff;
+        });
+
+        console.log(`✅ Found ${staffOnly.length} staff users for assignment`);
+        staffOnly.forEach((user, index) => {
+          console.log(
+            `👤 Staff ${index + 1}: ${user.email} - ${user.first_name || ""} ${
+              user.last_name || ""
+            }`
+          );
+        });
+
+        return staffOnly;
       } catch (error) {
-        console.error("Error fetching users:", error);
+        console.error("❌ Error fetching staff users:", error);
+        toast.error("Failed to load staff list");
         return [];
       }
     },
-    enabled: userRole === "manager",
+    enabled: (userRole === "manager" || userRole === "admin") && !!id,
+    staleTime: 60000, // Cache for 1 minute
   });
 
-  // Fetch users for mentions
+  // Fetch users for mentions (all users)
   const { data: mentionableUsers = [] } = useQuery({
     queryKey: ["mentionable-users", id],
     queryFn: async () => {
       try {
         const response = await axiosClient.get("/users/");
-        const users = response.data.results || response.data || [];
-        return users;
+        const data = response.data;
+        let users = [];
+
+        if (data && data.results) {
+          users = data.results;
+        } else if (Array.isArray(data)) {
+          users = data;
+        }
+
+        return users.filter((u) => u.is_active !== false);
       } catch (error) {
         console.error("Error fetching users for mentions:", error);
         return [];
@@ -181,14 +226,14 @@ export default function IssueDetailPage() {
   };
 
   const getDisplayName = (userData) => {
-    if (!userData) return "Unknown";
+    if (!userData) return "Not assigned";
     if (typeof userData === "string") return userData;
     if (typeof userData === "object") {
       if (userData.name) return userData.name;
       if (userData.first_name && userData.last_name) {
         return `${userData.first_name} ${userData.last_name}`;
       }
-      if (userData.email) return userData.email;
+      if (userData.email) return userData.email.split("@")[0];
       if (userData.username) return userData.username;
     }
     return "Unknown";
@@ -208,7 +253,7 @@ export default function IssueDetailPage() {
     try {
       return new Date(dateString).toLocaleDateString("en-US", {
         year: "numeric",
-        month: "long",
+        month: "short",
         day: "numeric",
         hour: "2-digit",
         minute: "2-digit",
@@ -384,17 +429,81 @@ export default function IssueDetailPage() {
     },
   });
 
+  // FIXED: Better assignment mutation with reassignment prevention
   const assignMutation = useMutation({
-    mutationFn: (assigneeId) =>
-      issuesApi.assign(id, { assignee_id: assigneeId }),
-    onSuccess: () => {
-      queryClient.invalidateQueries(["issues", id]);
-      toast.success("Issue assigned successfully!");
-      setAssignOpen(false);
+    mutationFn: async (assigneeId) => {
+      setIsAssigning(true);
+
+      // Check if trying to assign to same person
+      if (issueRes?.assignee?.id === assigneeId) {
+        const staffUser = staffUsers.find((u) => u.id === assigneeId);
+        const staffName = getDisplayName(staffUser);
+        throw new Error(`This issue is already assigned to ${staffName}`);
+      }
+
+      return await issuesApi.assign(id, { assignee_id: assigneeId });
     },
-    onError: (error) => {
-      console.error("Assignment error:", error);
-      toast.error("Failed to assign issue");
+    onSuccess: (response, assigneeId) => {
+      const staffUser = staffUsers.find((u) => u.id === assigneeId);
+      const staffName = getDisplayName(staffUser);
+      const staffEmail = getEmail(staffUser);
+
+      // Show appropriate message based on whether it was reassigned
+      if (issueRes?.assignee) {
+        toast.success(`Issue reassigned to ${staffName} (${staffEmail})`);
+      } else {
+        toast.success(`Issue assigned to ${staffName} (${staffEmail})`);
+      }
+
+      queryClient.invalidateQueries(["issues", id]);
+      setIsAssigning(false);
+      setAssignOpen(false);
+
+      // Refresh the issue data
+      refetchIssue();
+    },
+    onError: (error, assigneeId) => {
+      console.error("❌ Assignment error:", error);
+      setIsAssigning(false);
+
+      let errorMessage = "Failed to assign issue";
+      let isAlreadyAssigned = false;
+
+      // Check for specific error cases
+      if (error.message.includes("already assigned")) {
+        errorMessage = error.message;
+        isAlreadyAssigned = true;
+      } else if (error.response?.status === 400) {
+        const errorData = error.response.data;
+        if (errorData.detail?.includes("already assigned")) {
+          const staffUser = staffUsers.find((u) => u.id === assigneeId);
+          errorMessage = `This issue is already assigned to ${getDisplayName(
+            staffUser
+          )}`;
+          isAlreadyAssigned = true;
+        } else if (errorData.detail) {
+          errorMessage = errorData.detail;
+        }
+      } else if (error.response?.status === 403) {
+        errorMessage = "You don't have permission to assign this issue";
+      } else if (error.response?.status === 404) {
+        errorMessage = "Issue or staff member not found";
+      }
+
+      // Show user-friendly error message
+      if (isAlreadyAssigned) {
+        toast.error(errorMessage, {
+          duration: 5000,
+          icon: <Info className="text-amber-500" />,
+          style: {
+            background: "#fef3c7",
+            color: "#92400e",
+            border: "1px solid #fbbf24",
+          },
+        });
+      } else {
+        toast.error(errorMessage);
+      }
     },
   });
 
@@ -415,6 +524,22 @@ export default function IssueDetailPage() {
         errorMsg = "Validation error: " + JSON.stringify(error.response.data);
       } else if (error.response?.status === 404) {
         errorMsg = "Issue not found";
+      }
+      toast.error(errorMsg);
+    },
+  });
+
+  // Mutation for editing priority
+  const priorityMutation = useMutation({
+    mutationFn: (priority) => issuesApi.update(id, { priority }),
+    onSuccess: () => {
+      queryClient.invalidateQueries(["issues", id]);
+      toast.success("Priority updated successfully!");
+    },
+    onError: (error) => {
+      let errorMsg = "Failed to update priority";
+      if (error.response?.data?.detail) {
+        errorMsg = error.response.data.detail;
       }
       toast.error(errorMsg);
     },
@@ -532,6 +657,31 @@ export default function IssueDetailPage() {
       .slice(0, 5);
   };
 
+  // Check if current user can assign
+  const canAssignIssue = () => {
+    return currentUserRole === "manager" || currentUserRole === "admin";
+  };
+
+  // Handle priority change
+  const handlePriorityChange = () => {
+    if (!issueRes) return;
+
+    const priorities = ["low", "medium", "high", "critical"];
+    const currentPriority = issueRes.priority || "low";
+
+    const newPriority = prompt(
+      `Current priority: ${currentPriority.toUpperCase()}\n` +
+        `Enter new priority (${priorities.join("/")}):`,
+      currentPriority
+    );
+
+    if (newPriority && priorities.includes(newPriority.toLowerCase())) {
+      priorityMutation.mutate(newPriority.toLowerCase());
+    } else if (newPriority) {
+      toast.error(`Invalid priority. Must be one of: ${priorities.join(", ")}`);
+    }
+  };
+
   // Render role-specific buttons
   const renderActionButtons = () => {
     if (!issueRes) return null;
@@ -575,39 +725,84 @@ export default function IssueDetailPage() {
       );
     }
 
-    // Manager buttons
-    if (currentUserRole === "manager") {
+    // Manager/Admin buttons
+    if (currentUserRole === "manager" || currentUserRole === "admin") {
       return (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 items-center">
+          {/* Assign Staff Button */}
           <Button
             variant="primary"
-            onClick={() => setAssignOpen(true)}
+            onClick={() => {
+              if (staffUsers.length === 0) {
+                toast.error("No staff available to assign", {
+                  duration: 3000,
+                  icon: <AlertCircle className="text-red-500" size={18} />,
+                });
+                return;
+              }
+
+              // Check if there are staff users other than the current assignee
+              const otherStaff = staffUsers.filter(
+                (staff) => staff.id !== issueRes?.assignee?.id
+              );
+              if (otherStaff.length === 0 && issueRes?.assignee) {
+                toast.error("No other staff available to reassign to", {
+                  duration: 3000,
+                  icon: <AlertCircle className="text-amber-500" size={18} />,
+                  style: {
+                    background: "#fef3c7",
+                    color: "#92400e",
+                  },
+                });
+                return;
+              }
+
+              setAssignOpen(true);
+            }}
+            disabled={isAssigning || staffUsersLoading}
             className="flex items-center gap-2 text-xs sm:text-sm py-1.5 sm:py-2 px-2 sm:px-4"
           >
-            Assign Staff
+            {isAssigning ? (
+              <>
+                <div className="animate-spin h-3 w-3 border-2 border-white border-t-transparent rounded-full"></div>
+                Assigning...
+              </>
+            ) : staffUsersLoading ? (
+              <>
+                <div className="animate-spin h-3 w-3 border-2 border-teal-500 border-t-transparent rounded-full"></div>
+                Loading staff...
+              </>
+            ) : staffUsers.length === 0 ? (
+              <>
+                <AlertCircle size={14} className="w-3 h-3 sm:w-4 sm:h-4" />
+                No Staff Available
+              </>
+            ) : (
+              <>
+                <UserCheck size={14} className="w-3 h-3 sm:w-4 sm:h-4" />
+                {issueRes.assignee ? "Reassign Staff" : "Assign Staff"}
+              </>
+            )}
           </Button>
 
+          {/* Edit Priority Button - RESTORED */}
           <Button
             variant="secondary"
-            onClick={() => {
-              const priorities = ["low", "medium", "high", "critical"];
-              const currentPriority = issueRes?.priority || "low";
-              const newPriority = prompt(
-                `Current priority: ${currentPriority.toUpperCase()}\nEnter new priority (low/medium/high/critical):`,
-                currentPriority
-              );
-              if (
-                newPriority &&
-                priorities.includes(newPriority.toLowerCase())
-              ) {
-                editMutation.mutate({ priority: newPriority.toLowerCase() });
-              }
-            }}
+            onClick={handlePriorityChange}
+            disabled={priorityMutation.isPending}
             className="flex items-center gap-2 text-xs sm:text-sm py-1.5 sm:py-2 px-2 sm:px-4"
           >
             <Tag size={14} className="w-3 h-3 sm:w-4 sm:h-4" />
-            Edit Priority
+            {priorityMutation.isPending ? "Updating..." : "Edit Priority"}
           </Button>
+
+          {/* Currently Assigned Info */}
+          {issueRes.assignee && (
+            <div className="text-xs text-gray-600 bg-gray-100 px-3 py-1.5 rounded-lg">
+              <UserCheck size={12} className="inline mr-1" />
+              Currently assigned to: {getDisplayName(issueRes.assignee)}
+            </div>
+          )}
         </div>
       );
     }
@@ -642,6 +837,11 @@ export default function IssueDetailPage() {
     }
 
     return null;
+  };
+
+  // Handle assignment from modal
+  const handleAssignSubmit = (assigneeId) => {
+    assignMutation.mutate(assigneeId);
   };
 
   if (authLoading || issueLoading) {
@@ -937,44 +1137,86 @@ export default function IssueDetailPage() {
         <div className="space-y-4 sm:space-y-6">
           {/* Assignee card */}
           <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <User size={18} /> Assignee
-            </h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <User size={18} /> Assignee
+              </h3>
 
-            {assigneeDisplayName && assigneeDisplayName !== "Unknown" ? (
-              <div className="flex items-center gap-3">
+              {canAssignIssue() && (
+                <button
+                  onClick={() => setAssignOpen(true)}
+                  disabled={isAssigning || staffUsersLoading}
+                  className={`text-sm font-medium ${
+                    isAssigning || staffUsersLoading
+                      ? "text-gray-400 cursor-not-allowed"
+                      : "text-teal-600 hover:text-teal-700"
+                  }`}
+                >
+                  {isAssigning
+                    ? "Assigning..."
+                    : issue.assignee
+                    ? "Reassign"
+                    : "Assign"}
+                </button>
+              )}
+            </div>
+
+            {assigneeDisplayName && assigneeDisplayName !== "Not assigned" ? (
+              <div className="flex items-center gap-3 p-3 bg-teal-50 rounded-lg border border-teal-100">
                 <div className="w-10 h-10 bg-teal-500 rounded-full flex items-center justify-center text-white font-bold">
                   {getUserInitials(assigneeDisplayName)}
                 </div>
-                <div>
-                  <p className="font-medium text-gray-900">
-                    {assigneeDisplayName}
-                  </p>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium text-gray-900 truncate">
+                      {assigneeDisplayName}
+                    </p>
+                    <UserCheck size={14} className="text-teal-500" />
+                  </div>
                   {assigneeEmail && assigneeEmail !== assigneeDisplayName && (
-                    <p className="text-sm text-gray-500 flex items-center gap-1">
+                    <p className="text-sm text-gray-500 truncate flex items-center gap-1">
                       <Mail size={12} /> {assigneeEmail}
                     </p>
                   )}
+                  <div className="mt-1">
+                    <span className="inline-block px-2 py-0.5 bg-teal-100 text-teal-700 text-xs rounded-full">
+                      Assigned Staff
+                    </span>
+                  </div>
                 </div>
               </div>
             ) : (
-              <div className="text-center py-4">
-                <User className="mx-auto h-8 w-8 text-gray-400 mb-2" />
-                <p className="text-gray-500">No one assigned</p>
+              <div className="text-center py-6">
+                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <User className="text-gray-400" size={24} />
+                </div>
+                <p className="text-gray-700 font-medium">No one assigned</p>
+                <p className="text-gray-500 text-sm mt-1">
+                  {canAssignIssue()
+                    ? "Click 'Assign' to assign this issue to staff"
+                    : "Waiting for manager assignment"}
+                </p>
               </div>
             )}
 
-            {currentUserRole === "manager" && (
-              <Button
-                variant="secondary"
-                onClick={() => setAssignOpen(true)}
-                className="w-full mt-4 text-sm py-2"
-              >
-                {assigneeDisplayName && assigneeDisplayName !== "Unknown"
-                  ? "Reassign Staff"
-                  : "Assign Staff"}
-              </Button>
-            )}
+            {/* Staff availability notice */}
+            {canAssignIssue() &&
+              staffUsers.length === 0 &&
+              !staffUsersLoading && (
+                <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle size={16} className="text-amber-500 mt-0.5" />
+                    <div>
+                      <p className="text-amber-700 text-sm font-medium">
+                        No staff available
+                      </p>
+                      <p className="text-amber-600 text-xs mt-1">
+                        Add staff users with "staff" role to assign issues
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
           </div>
 
           {/* Attachments card */}
@@ -1145,19 +1387,31 @@ export default function IssueDetailPage() {
 
               <div>
                 <p className="text-xs text-gray-500 mb-1">Priority</p>
-                <span
-                  className={`inline-block px-2 py-1 rounded text-xs font-medium ${
-                    issue.priority === "low"
-                      ? "bg-blue-100 text-blue-700"
-                      : issue.priority === "medium"
-                      ? "bg-orange-100 text-orange-700"
-                      : issue.priority === "high"
-                      ? "bg-red-100 text-red-700"
-                      : "bg-purple-100 text-purple-700"
-                  }`}
-                >
-                  {issue.priority?.toUpperCase()}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`inline-block px-2 py-1 rounded text-xs font-medium ${
+                      issue.priority === "low"
+                        ? "bg-blue-100 text-blue-700"
+                        : issue.priority === "medium"
+                        ? "bg-orange-100 text-orange-700"
+                        : issue.priority === "high"
+                        ? "bg-red-100 text-red-700"
+                        : "bg-purple-100 text-purple-700"
+                    }`}
+                  >
+                    {issue.priority?.toUpperCase()}
+                  </span>
+                  {(currentUserRole === "manager" ||
+                    currentUserRole === "admin") && (
+                    <button
+                      onClick={handlePriorityChange}
+                      className="text-xs text-teal-600 hover:text-teal-700"
+                      title="Edit priority"
+                    >
+                      <Edit3 size={12} />
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div>
@@ -1202,7 +1456,9 @@ export default function IssueDetailPage() {
           issue={issue}
           staffUsers={staffUsers}
           onClose={() => setAssignOpen(false)}
-          onAssign={(assigneeId) => assignMutation.mutate(assigneeId)}
+          onAssign={handleAssignSubmit}
+          isLoading={isAssigning || staffUsersLoading}
+          currentAssignee={issue.assignee}
         />
       )}
 
