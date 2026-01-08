@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { useNavigate } from "react-router-dom"; // Make sure to import useNavigate
+import { useNavigate } from "react-router-dom";
 import {
   UserCog,
   ClipboardCheck,
@@ -35,19 +35,85 @@ import { useState, useEffect } from "react";
 import toast from "react-hot-toast";
 
 export default function ManagerDashboard() {
-  const navigate = useNavigate(); // Make sure this is defined
-  const { user } = useAuth();
+  const navigate = useNavigate();
+  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const queryClient = useQueryClient();
   const [assignData, setAssignData] = useState(null);
   const [timeFilter, setTimeFilter] = useState("month");
 
-  // Fetch all issues
+    useEffect(() => {
+      const userRole = localStorage.getItem("user_role");
+      const currentPath = window.location.pathname;
+
+      // Determine expected role from path
+      let expectedRole = "client";
+      if (currentPath.includes("staff")) expectedRole = "staff";
+      if (currentPath.includes("manager")) expectedRole = "manager";
+      if (currentPath.includes("admin")) expectedRole = "admin";
+
+      // If role doesn't match, clear other role's caches
+      if (userRole === expectedRole) {
+        // Clear other role's caches
+        let otherRoleKeys = [];
+
+        if (expectedRole === "client") {
+          otherRoleKeys = [
+            "staff-issues",
+            "staff-users-dashboard",
+            "manager-dashboard",
+          ];
+        } else if (expectedRole === "staff") {
+          otherRoleKeys = [
+            "issues-all",
+            "staff-users-dashboard",
+            "admin-dashboard",
+          ];
+        } else if (expectedRole === "manager") {
+          otherRoleKeys = ["staff-issues", "client-issues", "admin-dashboard"];
+        }
+
+        // Clear other role's queries
+        otherRoleKeys.forEach((key) => {
+          queryClient.removeQueries({ queryKey: [key] });
+          queryClient.invalidateQueries({ queryKey: [key] });
+        });
+      }
+    }, [queryClient]);
+  
+
+  // Show loading while checking auth
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-teal-500"></div>
+      </div>
+    );
+  }
+
+  // Check again before rendering
+  const token = localStorage.getItem("access_token");
+  const userRole = localStorage.getItem("user_role");
+
+  if (!token || userRole !== "manager") {
+    // Don't render, will be redirected by useEffect
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-teal-500 mx-auto"></div>
+          <p className="mt-4 text-slate-600">Redirecting to login...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 🔴 FIXED: Only fetch data if we're actually manager
   const { data: issuesData, isLoading: issuesLoading } = useQuery({
     queryKey: ["issues-all"],
     queryFn: () => issuesApi.listAll(),
+    enabled: userRole === "manager", // 🔴 Only fetch if manager
   });
 
-  // **FIXED: Use SAME endpoint as IssueDetailPage**
+  // 🔴 FIXED: Handle staff users fetch
   const { data: staffData = [], isLoading: staffLoading } = useQuery({
     queryKey: ["staff-users-dashboard"],
     queryFn: async () => {
@@ -55,7 +121,7 @@ export default function ManagerDashboard() {
         console.log("🔄 Fetching staff users for dashboard...");
         const response = await axiosClient.get("/users/");
 
-        // Handle different response formats (SAME as IssueDetailPage)
+        // Handle different response formats
         const data = response.data;
         let users = [];
 
@@ -70,12 +136,9 @@ export default function ManagerDashboard() {
 
         console.log(`📋 Total users from API: ${users.length}`);
 
-        // **CRITICAL: Filter ONLY staff users (not managers) - SAME FILTER**
+        // Filter ONLY staff users (not managers)
         const staffOnly = users.filter((u) => {
           const isStaff = u.role === "staff" && u.is_active !== false;
-          if (!isStaff && u.role) {
-            console.log(`❌ Filtered out (not staff): ${u.email} (${u.role})`);
-          }
           return isStaff;
         });
 
@@ -87,13 +150,14 @@ export default function ManagerDashboard() {
         return [];
       }
     },
+    enabled: userRole === "manager", // 🔴 Only fetch if manager
     staleTime: 60000,
   });
 
-  // Handle issues data
+  // 🔴 FIXED: Handle issues data safely
   const issues = issuesData?.results || [];
 
-  // Filter issues based on time filter
+  // 🔴 FIXED: Filter issues based on time filter
   const getFilteredIssues = () => {
     const now = new Date();
     return issues.filter((issue) => {
@@ -180,7 +244,7 @@ export default function ManagerDashboard() {
     };
   };
 
-  // **FIXED: Handle assignment properly**
+  // Handle assignment properly
   const assignMutation = useMutation({
     mutationFn: ({ issueId, assigneeId }) =>
       issuesApi.assign(issueId, { assignee_id: assigneeId }),
@@ -203,7 +267,7 @@ export default function ManagerDashboard() {
     assignMutation.mutate({ issueId: assignData.id, assigneeId });
   };
 
-  // **FIXED: Navigation function for issue detail**
+  // Navigation function for issue detail
   const handleViewIssue = (issueId) => {
     navigate(`/app/issues/${issueId}`);
   };
@@ -329,7 +393,7 @@ export default function ManagerDashboard() {
         />
       </div>
 
-      {/* Unassigned Issues Section - FIXED NAVIGATION */}
+      {/* Unassigned Issues Section */}
       <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
           <div>
@@ -412,7 +476,6 @@ export default function ManagerDashboard() {
                   </div>
 
                   <div className="flex gap-3">
-                    {/* **FIXED: Use button with onClick instead of Link** */}
                     <button
                       onClick={() => handleViewIssue(issue.id)}
                       className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium flex items-center gap-2"
@@ -450,7 +513,7 @@ export default function ManagerDashboard() {
         )}
       </div>
 
-      {/* Recently Assigned Issues - FIXED NAVIGATION */}
+      {/* Recently Assigned Issues */}
       <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6">
         <div className="flex items-center justify-between mb-6">
           <div>

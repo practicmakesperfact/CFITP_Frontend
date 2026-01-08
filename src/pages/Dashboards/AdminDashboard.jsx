@@ -30,16 +30,44 @@ export default function AdminDashboard() {
   const queryClient = useQueryClient();
   const [feedback, setFeedback] = useState([]);
   const [timeFilter, setTimeFilter] = useState("today");
-
   useEffect(() => {
-    const load = () => {
-      const data = JSON.parse(localStorage.getItem("cfitp_feedback") || "[]");
-      setFeedback(data.sort((a, b) => new Date(b.date) - new Date(a.date)));
-    };
-    load();
-    window.addEventListener("storage", load);
-    return () => window.removeEventListener("storage", load);
-  }, []);
+    const userRole = localStorage.getItem("user_role");
+    const currentPath = window.location.pathname;
+
+    // Determine expected role from path
+    let expectedRole = "client";
+    if (currentPath.includes("staff")) expectedRole = "staff";
+    if (currentPath.includes("manager")) expectedRole = "manager";
+    if (currentPath.includes("admin")) expectedRole = "admin";
+
+    // If role doesn't match, clear other role's caches
+    if (userRole === expectedRole) {
+      // Clear other role's caches
+      let otherRoleKeys = [];
+
+      if (expectedRole === "client") {
+        otherRoleKeys = [
+          "staff-issues",
+          "staff-users-dashboard",
+          "manager-dashboard",
+        ];
+      } else if (expectedRole === "staff") {
+        otherRoleKeys = [
+          "issues-all",
+          "staff-users-dashboard",
+          "admin-dashboard",
+        ];
+      } else if (expectedRole === "manager") {
+        otherRoleKeys = ["staff-issues", "client-issues", "admin-dashboard"];
+      }
+
+      // Clear other role's queries
+      otherRoleKeys.forEach((key) => {
+        queryClient.removeQueries({ queryKey: [key] });
+        queryClient.invalidateQueries({ queryKey: [key] });
+      });
+    }
+  }, [queryClient]);
 
   const { data: issuesData, isLoading } = useQuery({
     queryKey: ["issues-all"],

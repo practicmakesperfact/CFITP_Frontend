@@ -5,7 +5,7 @@ export const authApi = {
   login: async (credentials) => {
     try {
       const response = await axiosClient.post("/auth/login/", credentials);
-      
+
       return response;
     } catch (error) {
       console.error("Login error:", error.response?.data || error.message);
@@ -51,26 +51,43 @@ export const authApi = {
     }
   },
 
+  // In authApi.js logout function
   logout: async () => {
-    const refreshToken = localStorage.getItem("refresh_token");
-    if (refreshToken && !refreshToken.startsWith("demo")) {
-      try {
-        await axiosClient.post("/auth/logout/", { refresh: refreshToken });
-      } catch (error) {
-        console.error("Logout error:", error);
-      }
+    console.log("🧨 NUCLEAR LOGOUT STARTED");
+
+    // 1. Clear ALL caches first
+    if (window.queryClient) {
+      // Clear all queries
+      window.queryClient.clear();
+      window.queryClient.removeQueries();
+
+      // Clear cache storage
+      window.queryClient.getQueryCache().clear();
     }
-    // Clear local storage
-    localStorage.removeItem("access_token");
-    localStorage.removeItem("refresh_token");
-    localStorage.removeItem("user_role");
-    localStorage.removeItem("user_profile");
+
+    // 2. Clear localStorage
+    localStorage.clear();
+    sessionStorage.clear();
+
+    // 3. Clear cookies
+    document.cookie.split(";").forEach((c) => {
+      document.cookie = c
+        .replace(/^ +/, "")
+        .replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+    });
+
+    // 4. Force redirect with cache busting
+    const timestamp = Date.now();
+    window.location.href = `/login?t=${timestamp}&logout=true&nocache=1`;
+
+    // Prevent any further execution
+    throw new Error("Logout complete - redirecting");
   },
 
   me: async () => {
     try {
       const response = await axiosClient.get("/users/me/");
-      
+
       return response;
     } catch (error) {
       console.error(

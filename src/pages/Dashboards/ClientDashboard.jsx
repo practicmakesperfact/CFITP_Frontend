@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { issuesApi } from "../../api/issuesApi";
 import { useNavigate } from "react-router-dom";
 import {
@@ -17,14 +17,69 @@ import {
   ChevronDown,
 } from "lucide-react";
 import Chart from "react-apexcharts";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import Lottie from "lottie-react";
 import emptyAnimation from "../../assets/illustrations/empty-state.json";
+import { useAuth } from "../../app/hooks";
 
 export default function ClientDashboard() {
+  const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const [timeFilter, setTimeFilter] = useState("month");
+  useEffect(() => {
+    const userRole = localStorage.getItem("user_role");
+    const currentPath = window.location.pathname;
+
+    // Determine expected role from path
+    let expectedRole = "client";
+    if (currentPath.includes("staff")) expectedRole = "staff";
+    if (currentPath.includes("manager")) expectedRole = "manager";
+    if (currentPath.includes("admin")) expectedRole = "admin";
+
+    // If role doesn't match, clear other role's caches
+    if (userRole === expectedRole) {
+      // Clear other role's caches
+      let otherRoleKeys = [];
+
+      if (expectedRole === "client") {
+        otherRoleKeys = [
+          "staff-issues",
+          "staff-users-dashboard",
+          "manager-dashboard",
+        ];
+      } else if (expectedRole === "staff") {
+        otherRoleKeys = [
+          "issues-all",
+          "staff-users-dashboard",
+          "admin-dashboard",
+        ];
+      } else if (expectedRole === "manager") {
+        otherRoleKeys = ["staff-issues", "client-issues", "admin-dashboard"];
+      }
+
+      // Clear other role's queries
+      otherRoleKeys.forEach((key) => {
+        queryClient.removeQueries({ queryKey: [key] });
+        queryClient.invalidateQueries({ queryKey: [key] });
+      });
+    }
+  }, [queryClient]);
+
+  // Show loading
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-teal-500"></div>
+      </div>
+    );
+  }
+
+  // Don't render if redirecting
+  if (!isAuthenticated || localStorage.getItem("user_role") !== "client") {
+    return null;
+  }
 
   const { data: issuesData, isLoading } = useQuery({
     queryKey: ["issues-all"],

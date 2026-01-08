@@ -1,4 +1,3 @@
-
 import { useForm } from "react-hook-form";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link, useNavigate, useLocation } from "react-router-dom";
@@ -26,8 +25,8 @@ import {
 } from "lucide-react";
 
 // Import your company images
-import companyBackground from "../../assets/company-background.jpg"; 
-import anrsLogo from "../../assets/image.jpg"; 
+import companyBackground from "../../assets/company-background.jpg";
+import anrsLogo from "../../assets/image.jpg";
 
 // Role options with icons
 const ROLE_OPTIONS = [
@@ -123,13 +122,24 @@ export default function Login() {
     }
 
     try {
+      console.log("📤 Attempting login with:", {
+        email: data.email,
+        role: data.role,
+      });
+
       // Real login
       const res = await authApi.login({
         email: data.email,
         password: data.password,
+        role: data.role, // Send role to backend for validation
       });
 
+      console.log("✅ Login API response:", res.data);
+
       const { access, refresh } = res.data;
+
+      // 🔴 CRITICAL FIX: Clear localStorage BEFORE storing new tokens
+      localStorage.clear();
 
       // Store tokens securely
       localStorage.setItem("access_token", access);
@@ -139,11 +149,12 @@ export default function Login() {
       const userRes = await authApi.me();
       const user = userRes.data;
 
+      console.log("👤 User profile fetched:", user);
+
       // Check if user's role matches selected role
       if (user.role !== data.role) {
         toast.error(`Please login as ${user.role} role`);
-        localStorage.removeItem("access_token");
-        localStorage.removeItem("refresh_token");
+        localStorage.clear(); // Clear everything
         return;
       }
 
@@ -168,11 +179,16 @@ export default function Login() {
       localStorage.removeItem("login_attempts");
       localStorage.removeItem("lock_until");
 
-      toast.success(
-        `Welcome back, ${user.first_name || user.role.toUpperCase()}!`
-      );
+      // Clear ALL React Query caches before redirect
+      if (window.queryClient) {
+        window.queryClient.clear();
+        window.queryClient.removeQueries();
+        console.log("🧹 React Query cache cleared");
+      }
 
-      //Redirect to role-specific dashboard
+      toast.success("Login successful!");
+
+      // Determine redirect path based on role
       let redirectPath;
       switch (user.role) {
         case "client":
@@ -191,8 +207,15 @@ export default function Login() {
           redirectPath = "/app/dashboard";
       }
 
-      navigate(redirectPath, { replace: true });
+      console.log(`🔄 Redirecting to: ${redirectPath}`);
+
+      // 🔴 FIX: Only call navigate ONCE with a small delay
+      setTimeout(() => {
+        navigate(redirectPath, { replace: true });
+      }, 300);
     } catch (err) {
+      console.error("❌ Login error:", err);
+
       // Handle login failure
       const newAttempts = loginAttempts + 1;
       setLoginAttempts(newAttempts);
@@ -208,10 +231,17 @@ export default function Login() {
       } else {
         localStorage.setItem("login_attempts", newAttempts.toString());
 
+        // Show appropriate error message
         if (err.response?.status === 401) {
           toast.error("Invalid email or password");
         } else if (err.response?.data?.detail) {
           toast.error(err.response.data.detail);
+        } else if (err.response?.data?.role) {
+          toast.error(err.response.data.role);
+        } else if (err.message.includes("Network Error")) {
+          toast.error(
+            "Cannot connect to server. Please check your connection."
+          );
         } else {
           toast.error("Login failed. Please try again.");
         }
@@ -764,7 +794,7 @@ export default function Login() {
                 </p>
                 <Link
                   to="/register"
-                  className="inline-flex items-center gap-3 px-8 py-3 bg-gradient-to-r"
+                  className="inline-flex items-center gap-3 px-8 py-3 bg-gradient-to-r from-blue-50 via-white to-teal-50 border-2 border-teal-200 text-teal-700 hover:text-teal-800 hover:border-teal-300 hover:from-blue-100 hover:to-teal-100 rounded-2xl font-semibold transition-all duration-300 shadow-lg hover:shadow-xl hover:shadow-teal-100 group"
                 >
                   <span>Register here</span>
                   <ChevronDown
@@ -777,7 +807,7 @@ export default function Login() {
                 </p>
                 <Link
                   to="/request-access"
-                  className=" inline-flex items-center gap-3 px-8 py-3 bg-gradient-to-r from-blue-50 via-white to-teal-50 border-2 border-teal-200 text-teal-700 hover:text-teal-800 hover:border-teal-300 hover:from-blue-100 hover:to-teal-100 rounded-2xl font-semibold transition-all duration-300 shadow-lg hover:shadow-xl hover:shadow-teal-100 group"
+                  className="inline-flex items-center gap-3 px-8 py-3 bg-gradient-to-r from-blue-50 via-white to-teal-50 border-2 border-teal-200 text-teal-700 hover:text-teal-800 hover:border-teal-300 hover:from-blue-100 hover:to-teal-100 rounded-2xl font-semibold transition-all duration-300 shadow-lg hover:shadow-xl hover:shadow-teal-100 group"
                 >
                   <span>Request Access to Portal</span>
                   <ChevronDown

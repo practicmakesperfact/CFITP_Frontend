@@ -3,6 +3,7 @@ import { createBrowserRouter } from "react-router-dom";
 import ProtectedRoute from "./ProtectedRoute";
 import RoleRoute from "./RoleRoute";
 import DashboardRedirect from "../components/Dashboard/DashboardRedirect";
+
 import AppShell from "../components/Layout/AppShell";
 import HomeLayout from "../components/Layout/HomeLayout";
 import HomePage from "../pages/Home/HomePage";
@@ -109,11 +110,12 @@ const router = createBrowserRouter([
         ),
       },
 
-      // DASHBOARD REDIRECT (fallback - redirects to role-specific dashboard)
+      //DASHBOARD REDIRECT (fallback - redirects to role-specific dashboard)
       {
         path: "dashboard",
         element: <DashboardRedirect />,
       },
+     
 
       // ADMIN PAGES SECTION
       {

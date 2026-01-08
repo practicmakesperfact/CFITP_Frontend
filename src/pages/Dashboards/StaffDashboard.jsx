@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -9,31 +9,115 @@ import {
   AlertTriangle,
   ChevronDown,
 } from "lucide-react";
-import { formatDistanceToNow, subDays, isWithinInterval } from "date-fns";
+import { formatDistanceToNow, subDays } from "date-fns";
 import Lottie from "lottie-react";
 import emptyAnimation from "../../assets/illustrations/empty-state.json";
 import { issuesApi } from "../../api/issuesApi";
 import { useAuth } from "../../app/hooks";
 import KpiCard from "../../components/Dashboard/KpiCard";
 import ChartCard from "../../components/Dashboard/ChartCard";
-import { useState } from "react"; 
+import { useState, useEffect } from "react";
 
 export default function StaffDashboard() {
+  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
-  const { user } = useAuth();
   const [timeFilter, setTimeFilter] = useState("month");
+  const queryClient = useQueryClient();
 
+    useEffect(() => {
+      const userRole = localStorage.getItem("user_role");
+      const currentPath = window.location.pathname;
+
+      // Determine expected role from path
+      let expectedRole = "client";
+      if (currentPath.includes("staff")) expectedRole = "staff";
+      if (currentPath.includes("manager")) expectedRole = "manager";
+      if (currentPath.includes("admin")) expectedRole = "admin";
+
+      // If role doesn't match, clear other role's caches
+      if (userRole === expectedRole) {
+        // Clear other role's caches
+        let otherRoleKeys = [];
+
+        if (expectedRole === "client") {
+          otherRoleKeys = [
+            "staff-issues",
+            "staff-users-dashboard",
+            "manager-dashboard",
+          ];
+        } else if (expectedRole === "staff") {
+          otherRoleKeys = [
+            "issues-all",
+            "staff-users-dashboard",
+            "admin-dashboard",
+          ];
+        } else if (expectedRole === "manager") {
+          otherRoleKeys = ["staff-issues", "client-issues", "admin-dashboard"];
+        }
+
+        // Clear other role's queries
+        otherRoleKeys.forEach((key) => {
+          queryClient.removeQueries({ queryKey: [key] });
+          queryClient.invalidateQueries({ queryKey: [key] });
+        });
+      }
+    }, [queryClient]);
+
+  // Show loading while checking auth
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-teal-500"></div>
+      </div>
+    );
+  }
+
+  // Check again before rendering
+  const token = localStorage.getItem("access_token");
+  const userRole = localStorage.getItem("user_role");
+
+  if (!token || userRole !== "staff") {
+    // Don't render, will be redirected by useEffect
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-teal-500 mx-auto"></div>
+          <p className="mt-4 text-slate-600">Redirecting to login...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 🔴 FIXED: Only fetch data if we're actually staff
   const { data: issuesData, isLoading } = useQuery({
-    queryKey: ["issues-all"],
+    queryKey: ["staff-issues", user?.id, user?.email],
     queryFn: () => issuesApi.listAll(),
+    enabled: !!user?.email && userRole === "staff", // 🔴 Only fetch if staff
+    select: (data) => {
+      if (!user?.email) return { results: [], count: 0 };
+
+      console.log("🔍 Staff filtering:", {
+        staffEmail: user?.email,
+        filteredIssues: data.results.filter(
+          (i) => i.assignee_email === user?.email
+        ).length,
+      });
+
+      return {
+        results: data.results.filter((i) => i.assignee_email === user?.email),
+        count: data.results.filter((i) => i.assignee_email === user?.email)
+          .length,
+      };
+    },
   });
 
+  // 🔴 FIXED: Handle issues data safely
   const allIssues = issuesData?.results || [];
-  const myIssues = allIssues.filter((i) => i.assignee_email === user?.email);
 
+  // 🔴 FIXED: Filter issues function
   const getFilteredIssues = () => {
     const now = new Date();
-    return myIssues.filter((issue) => {
+    return allIssues.filter((issue) => {
       const date = new Date(issue.created_at);
       const timeDiff = now - date;
       const daysDiff = timeDiff / (1000 * 60 * 60 * 24);
@@ -60,24 +144,24 @@ export default function StaffDashboard() {
     const startOfWeek = new Date(now);
     startOfWeek.setDate(now.getDate() - 6); // Last 7 days including today
     startOfWeek.setHours(0, 0, 0, 0);
-    
+
     const days = Array(7).fill(0);
     const dayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    
+
     // Count issues created or updated in the last 7 days, grouped by day
     filteredIssues.forEach((issue) => {
       const created = new Date(issue.created_at);
       const updated = new Date(issue.updated_at);
-      
+
       // Use the most recent date (created or updated)
       const relevantDate = updated > created ? updated : created;
-      
+
       if (relevantDate >= startOfWeek) {
         const dayIndex = relevantDate.getDay();
         days[dayIndex] += 1;
       }
     });
-    
+
     return {
       series: [{ name: "Issues", data: days }],
       categories: dayLabels,
@@ -201,7 +285,7 @@ export default function StaffDashboard() {
             },
             chart: {
               events: {
-                dataPointSelection: function(event, chartContext, config) {
+                dataPointSelection: function (event, chartContext, config) {
                   // Optional: Add click handler to navigate to filtered issues
                   console.log("Selected day:", config.dataPointIndex);
                 },
@@ -235,11 +319,14 @@ export default function StaffDashboard() {
               formatter: function (val, opts) {
                 // Get the total of all series values
                 const seriesTotals = opts.w.globals.seriesTotals || [];
-                const total = seriesTotals.reduce((a, b) => Number(a) + Number(b), 0);
-                
+                const total = seriesTotals.reduce(
+                  (a, b) => Number(a) + Number(b),
+                  0
+                );
+
                 // Ensure val is a number
                 const value = Number(val);
-                
+
                 // Calculate percentage (out of 100%)
                 if (total > 0) {
                   const percentage = Math.round((value / total) * 100);
@@ -259,16 +346,22 @@ export default function StaffDashboard() {
               y: {
                 formatter: function (val, { seriesIndex, w }) {
                   const seriesTotals = w.globals.seriesTotals || [];
-                  const total = seriesTotals.reduce((a, b) => Number(a) + Number(b), 0);
+                  const total = seriesTotals.reduce(
+                    (a, b) => Number(a) + Number(b),
+                    0
+                  );
                   const value = Number(val);
-                  const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
-                  return `${value} issue${value !== 1 ? "s" : ""} (${percentage}%)`;
+                  const percentage =
+                    total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                  return `${value} issue${
+                    value !== 1 ? "s" : ""
+                  } (${percentage}%)`;
                 },
               },
             },
             chart: {
               events: {
-                dataPointSelection: function(event, chartContext, config) {
+                dataPointSelection: function (event, chartContext, config) {
                   // Optional: Add click handler to filter by status
                   const statuses = ["open", "in_progress", "resolved"];
                   const selectedStatus = statuses[config.dataPointIndex];
@@ -307,7 +400,10 @@ export default function StaffDashboard() {
                       fontWeight: 600,
                       color: "#6B7280",
                       formatter: function (w) {
-                        const total = w.globals.seriesTotals.reduce((a, b) => a + b, 0);
+                        const total = w.globals.seriesTotals.reduce(
+                          (a, b) => a + b,
+                          0
+                        );
                         return total > 0 ? total.toString() : "0";
                       },
                     },
@@ -350,7 +446,7 @@ export default function StaffDashboard() {
                 key={issue.id}
                 whileHover={{ x: 8 }}
                 className="p-6 bg-gray-50 rounded-xl border border-gray-200 shadow flex items-center justify-between cursor-pointer hover:shadow-lg transition-all"
-                onClick={() => navigate(`/issues/${issue.id}`)}
+                onClick={() => navigate(`/app/issues/${issue.id}`)}
               >
                 <div className="flex-1">
                   <h3 className="text-xl font-semibold text-slate-800">
@@ -367,12 +463,16 @@ export default function StaffDashboard() {
                   className={`px-4 py-1.5 rounded-full text-sm font-semibold ${
                     issue.status === "open"
                       ? "bg-red-100 text-red-700"
-                      : issue.status === "in-progress" || issue.status === "in_progress"
+                      : issue.status === "in-progress" ||
+                        issue.status === "in_progress"
                       ? "bg-amber-100 text-amber-700"
                       : "bg-emerald-100 text-emerald-700"
                   }`}
                 >
-                  {issue.status?.replace(/_/g, " ").replace("-", " ").toUpperCase()}
+                  {issue.status
+                    ?.replace(/_/g, " ")
+                    .replace("-", " ")
+                    .toUpperCase()}
                 </span>
               </motion.div>
             ))}
@@ -403,7 +503,7 @@ export default function StaffDashboard() {
               <motion.div
                 key={i.id}
                 whileHover={{ x: 8 }}
-                onClick={() => navigate(`/issues/${i.id}`)}
+                onClick={() => navigate(`/app/issues/${i.id}`)}
                 className="p-6 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl border border-gray-200 cursor-pointer hover:shadow-md transition-all"
               >
                 <div className="flex items-center justify-between">
@@ -422,7 +522,8 @@ export default function StaffDashboard() {
                     className={`px-4 py-1.5 rounded-full text-sm font-bold ${
                       i.status === "open"
                         ? "bg-red-100 text-red-700"
-                        : i.status === "in-progress" || i.status === "in_progress"
+                        : i.status === "in-progress" ||
+                          i.status === "in_progress"
                         ? "bg-amber-100 text-amber-700"
                         : "bg-emerald-100 text-emerald-700"
                     }`}

@@ -1,6 +1,4 @@
-// src/api/axiosClient.js
 import axios from "axios";
-import { useUIStore } from "../app/store/uiStore";
 
 const axiosClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api/v1/",
@@ -87,15 +85,26 @@ axiosClient.interceptors.response.use(
         processQueue(refreshError, null);
         isRefreshing = false;
 
-        // Clear tokens and redirect to login
-        localStorage.removeItem("access_token");
-        localStorage.removeItem("refresh_token");
-        localStorage.removeItem("user_role");
-        localStorage.removeItem("user_profile");
+        // Clear ALL tokens and data
+        localStorage.clear();
 
-        window.location.href = "/login";
+        // Clear React Query cache if available globally
+        if (window.queryClient) {
+          window.queryClient.clear();
+        }
+
+        // Only redirect if not already on login page
+        if (!window.location.pathname.includes("/login")) {
+          window.location.href = "/login";
+        }
+
         return Promise.reject(refreshError);
       }
+    }
+
+    // Handle other errors
+    if (error.response?.status === 403) {
+      console.error("Access forbidden - insufficient permissions");
     }
 
     return Promise.reject(error);
