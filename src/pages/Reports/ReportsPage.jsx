@@ -162,19 +162,33 @@ export default function ReportsPage() {
         const params = {
           start_date: startDate,
           end_date: endDate,
-          ...filters,
+          ...(filters.priority.length > 0 && {
+            priority: filters.priority.join(","),
+          }),
+          ...(filters.status.length > 0 && {
+            status: filters.status.join(","),
+          }),
+          ...(filters.slaOnly && { sla_only: true }),
         };
 
+        console.log("📡 Fetching analytics with params:", params);
         const response = await reportsApi.getAnalyticsData(params);
-        return response.data?.data || response.data || {};
+        console.log("📡 Analytics API Response:", response);
+
+        // Handle nested data structure
+        if (response.data && response.data.data) {
+          return response.data.data;
+        }
+        return response.data || {};
       } catch (err) {
-        console.error("Error fetching analytics:", err);
+        console.error("❌ Error fetching analytics:", err);
         toast.error(
           err.response?.data?.message ||
             err.response?.data?.error ||
+            err.message ||
             "Failed to load analytics data"
         );
-        return {};
+        return null;
       } finally {
         setLoading(false);
       }
@@ -284,7 +298,7 @@ export default function ReportsPage() {
   // Filter handling
   const handleFilterChange = (filterType, value) => {
     setFilters((prev) => {
-      if (typeof prev[filterType] === "boolean") {
+      if (filterType === "slaOnly") {
         return { ...prev, [filterType]: value };
       }
 
@@ -405,155 +419,164 @@ export default function ReportsPage() {
     }
   };
 
-  // Prepare chart data with REAL values from analyticsData
+  // Prepare chart data with proper structure
   const prepareChartData = () => {
-    if (!analyticsData || Object.keys(analyticsData).length === 0) {
-      // Return fallback data matching your screenshot
-      return {
-        issuesByStatus: {
-          type: "pie",
-          data: {
-            series: [14, 5, 4, 4],
-            labels: ["Open", "In Progress", "Resolved", "Closed"],
-            colors: ["#0EA5A4", "#FB923C", "#10B981", "#8B5CF6"],
-          },
-        },
-        issuesByPriority: {
-          type: "bar",
-          data: {
-            series: [11, 9, 6, 1],
-            labels: ["Low", "Medium", "High", "Critical"],
-            colors: ["#10B981", "#F59E0B", "#FB923C", "#EF4444"],
-          },
-        },
-        teamPerformance: {
-          type: "bar",
-          data: {
-            series: [
-              { name: "Resolved", data: [3, 5, 0] },
-              { name: "Pending", data: [2, 11, 0] },
-            ],
-            categories: ["jak", "kida", "Hay"],
-            colors: ["#0EA5A4", "#FB923C"],
-          },
-        },
-        resolutionTrend: {
-          type: "area",
-          data: {
-            series: [
-              { name: "Issues Created", data: [10, 8, 15, 12, 9, 14, 11, 13] },
-              { name: "Issues Resolved", data: [6, 5, 10, 8, 7, 9, 8, 10] },
-            ],
-            categories: [
-              "Jan",
-              "Feb",
-              "Mar",
-              "Apr",
-              "May",
-              "Jun",
-              "Jul",
-              "Aug",
-            ],
-            colors: ["#0EA5A4", "#10B981"],
-          },
-        },
-      };
+    if (!analyticsData || analyticsLoading) {
+      console.log("⏳ No analytics data yet or still loading");
+      return null;
     }
 
-    const data = analyticsData;
+    console.log("🔍 Preparing chart data from analytics:", analyticsData);
 
-    // Get actual data for charts
-    return {
-      issuesByStatus: {
-        type: "pie",
-        data: {
-          series: data.issues_by_status?.map((item) => item.count) || [],
-          labels:
-            data.issues_by_status?.map(
-              (item) => item.status_display || item.status
-            ) || [],
-          colors: [
-            "#0EA5A4",
-            "#FB923C",
-            "#10B981",
-            "#8B5CF6",
-            "#EC4899",
-            "#6366F1",
-          ],
-        },
-      },
+    // Extract data with fallbacks
+    const issuesByStatus = analyticsData.issues_by_status || [];
+    const issuesByPriority = analyticsData.issues_by_priority || [];
+    const teamPerformance = analyticsData.team_performance || [];
+
+    // Debug: Check data structure
+    console.log("📊 Raw data check:", {
+      issuesByStatus,
+      issuesByPriority,
+      teamPerformance,
+      hasIssuesByStatus: issuesByStatus.length > 0,
+      hasIssuesByPriority: issuesByPriority.length > 0,
+      hasTeamPerformance: teamPerformance.length > 0,
+    });
+
+    // 1. Issues by Status - Pie Chart (REMOVED - We'll use direct ApexChart now)
+    // Keeping the data preparation for other charts
+    const statusData = {
+      series: [],
+      labels: [],
+      colors: ["#3B82F6", "#8B5CF6", "#10B981", "#6B7280"],
+    };
+
+    if (issuesByStatus.length > 0) {
+      // Sort in logical order: Open → In Progress → Resolved → Closed
+      const statusOrder = ["open", "in_progress", "resolved", "closed"];
+      const sortedStatus = [...issuesByStatus].sort((a, b) => {
+        const aIndex = statusOrder.indexOf(a.status);
+        const bIndex = statusOrder.indexOf(b.status);
+        return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex);
+      });
+
+      sortedStatus.forEach((item) => {
+        statusData.series.push(item.count || 0);
+        statusData.labels.push(
+          item.status_display ||
+            item.status
+              .replace(/_/g, " ")
+              .replace(/\b\w/g, (l) => l.toUpperCase())
+        );
+      });
+    } else {
+      // Fallback demo data
+      statusData.series = [13, 6, 5, 3];
+      statusData.labels = ["Open", "In Progress", "Resolved", "Closed"];
+    }
+
+    // 2. Issues by Priority - Bar Chart
+    const priorityData = {
+      series: [],
+      labels: ["Critical", "High", "Medium", "Low"],
+      colors: ["#EF4444", "#F97316", "#F59E0B", "#10B981"],
+    };
+
+    if (issuesByPriority.length > 0) {
+      // Create a map for priority counts
+      const priorityMap = {
+        critical: 0,
+        high: 0,
+        medium: 0,
+        low: 0,
+      };
+
+      issuesByPriority.forEach((item) => {
+        const priority = item.priority?.toLowerCase();
+        if (priority && priority in priorityMap) {
+          priorityMap[priority] = item.count || 0;
+        }
+      });
+
+      // Add in correct order
+      priorityData.series = [
+        priorityMap.critical,
+        priorityMap.high,
+        priorityMap.medium,
+        priorityMap.low,
+      ];
+    } else {
+      // Fallback demo data
+      priorityData.series = [1, 6, 9, 11];
+    }
+
+    // 3. Team Performance - Grouped Bar Chart
+    const teamData = {
+      series: [
+        { name: "Resolved", data: [] },
+        { name: "Pending", data: [] },
+      ],
+      categories: [],
+      colors: ["#10B981", "#FB923C"],
+    };
+
+    if (teamPerformance.length > 0) {
+      teamPerformance.forEach((member) => {
+        teamData.categories.push(
+          member.name || member.email?.split("@")[0] || "Unknown"
+        );
+        teamData.series[0].data.push(member.resolved || 0);
+        teamData.series[1].data.push(member.pending || 0);
+      });
+    } else {
+      // Fallback demo data
+      teamData.categories = ["John Doe", "Jane Smith", "Bob Johnson"];
+      teamData.series[0].data = [8, 12, 6];
+      teamData.series[1].data = [2, 3, 1];
+    }
+
+    // 4. Resolution Trend - Area Chart (using fallback data)
+    const trendData = {
+      series: [
+        { name: "Issues Created", data: [5, 8, 6, 10, 7, 9] },
+        { name: "Issues Resolved", data: [4, 6, 5, 8, 6, 8] },
+      ],
+      categories: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
+      colors: ["#0EA5A4", "#10B981"],
+    };
+
+    const chartData = {
+      // REMOVED: issuesByStatus from here - we'll render it directly
       issuesByPriority: {
         type: "bar",
-        data: {
-          series: data.issues_by_priority?.map((item) => item.count) || [],
-          labels: data.issues_by_priority?.map(
-            (item) => item.priority_display || item.priority
-          ) || ["Low", "Medium", "High", "Critical"],
-          colors: ["#10B981", "#F59E0B", "#FB923C", "#EF4444"],
-        },
+        data: priorityData,
       },
       teamPerformance: {
         type: "bar",
-        data: {
-          series: [
-            {
-              name: "Resolved",
-              data:
-                data.team_performance?.map((member) => member.resolved || 0) ||
-                [],
-            },
-            {
-              name: "Pending",
-              data:
-                data.team_performance?.map((member) => member.pending || 0) ||
-                [],
-            },
-          ],
-          categories:
-            data.team_performance?.map(
-              (member) =>
-                member.name?.split(" ")[0] ||
-                member.email?.split("@")[0] ||
-                `User ${member.id}`
-            ) || [],
-          colors: ["#0EA5A4", "#FB923C"],
-        },
+        data: teamData,
       },
       resolutionTrend: {
         type: "area",
-        data: {
-          series: [
-            { name: "Issues Created", data: [10, 8, 15, 12, 9, 14, 11, 13] },
-            { name: "Issues Resolved", data: [6, 5, 10, 8, 7, 9, 8, 10] },
-          ],
-          categories: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug"],
-          colors: ["#0EA5A4", "#10B981"],
-        },
+        data: trendData,
       },
     };
+
+    console.log("✅ Prepared chart data:", chartData);
+    return chartData;
   };
 
   // Get metric value with fallback
   const getMetricValue = (metricName) => {
     if (!analyticsData?.summary) {
-      const sampleData = {
-        total_issues: { formatted: "26" },
-        resolved_issues: { formatted: "2" },
-        avg_resolution_time: { formatted: "24.5h" },
-        sla_compliance: { formatted: "92.3%" },
-        team_efficiency: { formatted: "76.5%" },
-        first_response_time: { formatted: "2.3h" },
-        reopen_rate: { formatted: "8.2%" },
-      };
-      return sampleData[metricName] || { formatted: "0" };
+      return { formatted: "0", raw: 0 };
     }
 
     const rawValue = analyticsData.summary[metricName];
     if (rawValue === null || rawValue === undefined || rawValue === "N/A") {
-      return { formatted: "N/A" };
+      return { formatted: "N/A", raw: 0 };
     }
 
-    return { formatted: rawValue };
+    return { formatted: rawValue, raw: rawValue };
   };
 
   // KPI metrics
@@ -672,7 +695,9 @@ export default function ReportsPage() {
     }
   }, [reportId, pollReportStatus]);
 
+  // Prepare chart data
   const chartData = prepareChartData();
+
   const periodDisplay =
     analyticsData?.period_display ||
     `${format(parseISO(startDate), "MMM dd, yyyy")} - ${format(
@@ -680,8 +705,8 @@ export default function ReportsPage() {
       "MMM dd, yyyy"
     )}`;
 
-  // Loading skeleton
-  if (analyticsLoading && !analyticsData) {
+  // Show loading state if chart data is not ready
+  if (analyticsLoading || !chartData) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-teal-50/30 p-6">
         <div className="max-w-7xl mx-auto">
@@ -747,7 +772,7 @@ export default function ReportsPage() {
               </motion.p>
             </div>
 
-            {/* Action Buttons - Only CSV and PDF */}
+            {/* Action Buttons */}
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -829,188 +854,190 @@ export default function ReportsPage() {
         )}
 
         {/* Filters Panel */}
-        {showFilters && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className={`mb-8 rounded-2xl ${
-              darkMode
-                ? "bg-gray-800/50 border-gray-700"
-                : "bg-white border-gray-200"
-            } border shadow-sm overflow-hidden`}
-          >
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h3
-                    className={`font-semibold ${
-                      darkMode ? "text-white" : "text-gray-900"
-                    }`}
-                  >
-                    Advanced Filters
-                  </h3>
-                  <p
-                    className={`text-sm ${
-                      darkMode ? "text-gray-400" : "text-gray-600"
-                    }`}
-                  >
-                    Fine-tune your report with detailed filters
-                  </p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={clearFilters}
-                    className="flex items-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                  >
-                    <FilterX className="w-4 h-4" />
-                    Clear All
-                  </button>
-                  <button
-                    onClick={() => {
-                      applyFilters();
-                      setShowFilters(false);
-                    }}
-                    className="px-6 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-colors"
-                  >
-                    Apply Filters
-                  </button>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* Priority Filter */}
-                <div>
-                  <label
-                    className={`block text-sm font-medium mb-3 ${
-                      darkMode ? "text-gray-300" : "text-gray-700"
-                    }`}
-                  >
-                    Priority Level
-                  </label>
-                  <div className="space-y-2">
-                    {priorityOptions.map((priority) => (
-                      <label
-                        key={priority.value}
-                        className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                          darkMode
-                            ? "bg-gray-800 border-gray-700 hover:bg-gray-700"
-                            : "bg-white border-gray-200 hover:bg-gray-50"
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={filters.priority.includes(priority.value)}
-                          onChange={() =>
-                            handleFilterChange("priority", priority.value)
-                          }
-                          className="rounded text-teal-600 focus:ring-teal-500"
-                        />
-                        <span className={`font-medium ${priority.color}`}>
-                          {priority.label}
-                        </span>
-                      </label>
-                    ))}
+        <AnimatePresence>
+          {showFilters && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              className={`mb-8 rounded-2xl ${
+                darkMode
+                  ? "bg-gray-800/50 border-gray-700"
+                  : "bg-white border-gray-200"
+              } border shadow-sm overflow-hidden`}
+            >
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h3
+                      className={`font-semibold ${
+                        darkMode ? "text-white" : "text-gray-900"
+                      }`}
+                    >
+                      Advanced Filters
+                    </h3>
+                    <p
+                      className={`text-sm ${
+                        darkMode ? "text-gray-400" : "text-gray-600"
+                      }`}
+                    >
+                      Fine-tune your report with detailed filters
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={clearFilters}
+                      className="flex items-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                    >
+                      <FilterX className="w-4 h-4" />
+                      Clear All
+                    </button>
+                    <button
+                      onClick={() => {
+                        applyFilters();
+                        setShowFilters(false);
+                      }}
+                      className="px-6 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-colors"
+                    >
+                      Apply Filters
+                    </button>
                   </div>
                 </div>
 
-                {/* Status Filter */}
-                <div>
-                  <label
-                    className={`block text-sm font-medium mb-3 ${
-                      darkMode ? "text-gray-300" : "text-gray-700"
-                    }`}
-                  >
-                    Issue Status
-                  </label>
-                  <div className="space-y-2">
-                    {statusOptions.map((status) => (
-                      <label
-                        key={status.value}
-                        className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                          darkMode
-                            ? "bg-gray-800 border-gray-700 hover:bg-gray-700"
-                            : "bg-white border-gray-200 hover:bg-gray-50"
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={filters.status.includes(status.value)}
-                          onChange={() =>
-                            handleFilterChange("status", status.value)
-                          }
-                          className="rounded text-teal-600 focus:ring-teal-500"
-                        />
-                        <span className={`font-medium ${status.color}`}>
-                          {status.label}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Date Range & Options */}
-                <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {/* Priority Filter */}
                   <div>
                     <label
                       className={`block text-sm font-medium mb-3 ${
                         darkMode ? "text-gray-300" : "text-gray-700"
                       }`}
                     >
-                      Date Range
+                      Priority Level
                     </label>
-                    <div className="flex flex-wrap gap-2">
-                      {datePresets.map((preset) => (
-                        <button
-                          key={preset.value}
-                          onClick={() => handleDatePreset(preset.value)}
-                          className={`px-3 py-2 rounded-lg border transition-all text-sm ${
-                            dateRange === preset.value
-                              ? "bg-teal-600 border-teal-600 text-white"
-                              : darkMode
-                              ? "bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700"
-                              : "bg-white border-gray-300 text-gray-600 hover:bg-gray-50"
+                    <div className="space-y-2">
+                      {priorityOptions.map((priority) => (
+                        <label
+                          key={priority.value}
+                          className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                            darkMode
+                              ? "bg-gray-800 border-gray-700 hover:bg-gray-700"
+                              : "bg-white border-gray-200 hover:bg-gray-50"
                           }`}
                         >
-                          {preset.label}
-                        </button>
+                          <input
+                            type="checkbox"
+                            checked={filters.priority.includes(priority.value)}
+                            onChange={() =>
+                              handleFilterChange("priority", priority.value)
+                            }
+                            className="rounded text-teal-600 focus:ring-teal-500"
+                          />
+                          <span className={`font-medium ${priority.color}`}>
+                            {priority.label}
+                          </span>
+                        </label>
                       ))}
                     </div>
-                    {dateRange === "custom" && (
-                      <div className="space-y-2 mt-3">
-                        <input
-                          type="date"
-                          value={startDate}
-                          onChange={(e) => setStartDate(e.target.value)}
-                          className={`w-full px-3 py-2 rounded-lg border ${
+                  </div>
+
+                  {/* Status Filter */}
+                  <div>
+                    <label
+                      className={`block text-sm font-medium mb-3 ${
+                        darkMode ? "text-gray-300" : "text-gray-700"
+                      }`}
+                    >
+                      Issue Status
+                    </label>
+                    <div className="space-y-2">
+                      {statusOptions.map((status) => (
+                        <label
+                          key={status.value}
+                          className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
                             darkMode
-                              ? "bg-gray-800 border-gray-700 text-white"
-                              : "bg-white border-gray-300 text-gray-900"
+                              ? "bg-gray-800 border-gray-700 hover:bg-gray-700"
+                              : "bg-white border-gray-200 hover:bg-gray-50"
                           }`}
-                          max={endDate}
-                        />
-                        <input
-                          type="date"
-                          value={endDate}
-                          onChange={(e) => setEndDate(e.target.value)}
-                          className={`w-full px-3 py-2 rounded-lg border ${
-                            darkMode
-                              ? "bg-gray-800 border-gray-700 text-white"
-                              : "bg-white border-gray-300 text-gray-900"
-                          }`}
-                          min={startDate}
-                        />
+                        >
+                          <input
+                            type="checkbox"
+                            checked={filters.status.includes(status.value)}
+                            onChange={() =>
+                              handleFilterChange("status", status.value)
+                            }
+                            className="rounded text-teal-600 focus:ring-teal-500"
+                          />
+                          <span className={`font-medium ${status.color}`}>
+                            {status.label}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Date Range & Options */}
+                  <div className="space-y-6">
+                    <div>
+                      <label
+                        className={`block text-sm font-medium mb-3 ${
+                          darkMode ? "text-gray-300" : "text-gray-700"
+                        }`}
+                      >
+                        Date Range
+                      </label>
+                      <div className="flex flex-wrap gap-2">
+                        {datePresets.map((preset) => (
+                          <button
+                            key={preset.value}
+                            onClick={() => handleDatePreset(preset.value)}
+                            className={`px-3 py-2 rounded-lg border transition-all text-sm ${
+                              dateRange === preset.value
+                                ? "bg-teal-600 border-teal-600 text-white"
+                                : darkMode
+                                ? "bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700"
+                                : "bg-white border-gray-300 text-gray-600 hover:bg-gray-50"
+                            }`}
+                          >
+                            {preset.label}
+                          </button>
+                        ))}
                       </div>
-                    )}
+                      {dateRange === "custom" && (
+                        <div className="space-y-2 mt-3">
+                          <input
+                            type="date"
+                            value={startDate}
+                            onChange={(e) => setStartDate(e.target.value)}
+                            className={`w-full px-3 py-2 rounded-lg border ${
+                              darkMode
+                                ? "bg-gray-800 border-gray-700 text-white"
+                                : "bg-white border-gray-300 text-gray-900"
+                            }`}
+                            max={endDate}
+                          />
+                          <input
+                            type="date"
+                            value={endDate}
+                            onChange={(e) => setEndDate(e.target.value)}
+                            className={`w-full px-3 py-2 rounded-lg border ${
+                              darkMode
+                                ? "bg-gray-800 border-gray-700 text-white"
+                                : "bg-white border-gray-300 text-gray-900"
+                            }`}
+                            min={startDate}
+                          />
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          </motion.div>
-        )}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Main Dashboard Content */}
-        {analyticsData && (
+        {analyticsData && chartData && (
           <div className="space-y-8">
             {/* KPI Dashboard */}
             <motion.div
@@ -1145,7 +1172,7 @@ export default function ReportsPage() {
 
               {/* Charts Grid */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Issues by Status */}
+                {/* Issues by Status - PIE CHART (FIXED - LIKE CLIENT DASHBOARD) */}
                 <div
                   className={`rounded-2xl border ${
                     darkMode
@@ -1185,11 +1212,7 @@ export default function ReportsPage() {
                         </div>
                       </div>
                       <div className="text-sm text-gray-500">
-                        Total:{" "}
-                        {chartData.issuesByStatus.data.series.reduce(
-                          (a, b) => a + b,
-                          0
-                        ) || 0}
+                        Total: {analyticsData?.summary?.total_issues || 0}
                       </div>
                     </div>
                     <div className="h-[300px]">
@@ -1200,14 +1223,82 @@ export default function ReportsPage() {
                           </div>
                         }
                       >
-                        <ChartCard
-                          title=""
+                        {/* DIRECT APEXCHART USING REAL DATABASE DATA */}
+                        <ApexChart
+                          options={{
+                            chart: {
+                              type: "pie",
+                              height: 300,
+                              toolbar: { show: false },
+                            },
+                            labels: [
+                              "Open",
+                              "In Progress",
+                              "Resolved",
+                              "Closed",
+                            ],
+                            colors: [
+                              "#ef4444",
+                              "#f59e0b",
+                              "#3b82f6",
+                              "#10b981",
+                            ],
+                            legend: {
+                              position: "bottom",
+                              fontSize: "14px",
+                              fontFamily: "inherit",
+                              fontWeight: 500,
+                            },
+                            dataLabels: {
+                              enabled: false,
+                            },
+                            plotOptions: {
+                              pie: {
+                                donut: {
+                                  size: "70%",
+                                  labels: {
+                                    show: true,
+                                    total: {
+                                      show: true,
+                                      label: "Total Issues",
+                                      fontSize: "22px",
+                                      fontWeight: 600,
+                                      color: darkMode ? "#D1D5DB" : "#374151",
+                                      formatter: () =>
+                                        (
+                                          analyticsData?.summary
+                                            ?.total_issues || 0
+                                        ).toString(),
+                                    },
+                                    value: {
+                                      show: true,
+                                      fontSize: "28px",
+                                      fontWeight: 700,
+                                      color: darkMode ? "#F9FAFB" : "#111827",
+                                      formatter: (val) =>
+                                        Math.round(val).toString(),
+                                    },
+                                  },
+                                },
+                              },
+                            },
+                            tooltip: {
+                              y: {
+                                formatter: (value) =>
+                                  value + " issue" + (value !== 1 ? "s" : ""),
+                              },
+                              theme: darkMode ? "dark" : "light",
+                            },
+                          }}
+                          series={[
+                            analyticsData?.summary?.open_issues || 0,
+                            analyticsData?.summary?.in_progress_issues || 0,
+                            analyticsData?.summary?.resolved_issues || 0,
+                            analyticsData?.summary?.closed_issues || 0,
+                          ]}
                           type="pie"
-                          data={chartData.issuesByStatus.data}
-                          isLoading={analyticsLoading}
                           height={300}
-                          showHeader={false}
-                          darkMode={darkMode}
+                          width="100%"
                         />
                       </React.Suspense>
                     </div>
@@ -1276,7 +1367,7 @@ export default function ReportsPage() {
                   </div>
                 </div>
 
-                {/* Team Performance - BAR CHART */}
+                {/* Team Performance - GROUPED BAR CHART */}
                 <div
                   className={`rounded-2xl border ${
                     darkMode
@@ -1338,7 +1429,7 @@ export default function ReportsPage() {
                   </div>
                 </div>
 
-                {/* Resolution Trends */}
+                {/* Resolution Trends - AREA CHART */}
                 <div
                   className={`rounded-2xl border ${
                     darkMode
