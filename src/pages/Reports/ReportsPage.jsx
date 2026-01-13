@@ -27,6 +27,7 @@ import {
   PieChart,
   Eye,
   TrendingUp as TrendingUpIcon,
+  ChevronDown,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -57,6 +58,10 @@ export default function ReportsPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [selectedMember, setSelectedMember] = useState(null);
   const [showMemberModal, setShowMemberModal] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  
+  // Add this state to track reports being downloaded
+  const [downloadingReports, setDownloadingReports] = useState(new Set());
 
   // Filters
   const [filters, setFilters] = useState({
@@ -67,6 +72,21 @@ export default function ReportsPage() {
 
   // Refs
   const headerRef = useRef(null);
+  const exportMenuRef = useRef(null);
+
+  // Close export menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (
+        exportMenuRef.current &&
+        !exportMenuRef.current.contains(event.target)
+      ) {
+        setShowExportMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // Date presets
   const datePresets = [
@@ -171,9 +191,7 @@ export default function ReportsPage() {
           ...(filters.slaOnly && { sla_only: true }),
         };
 
-        console.log("📡 Fetching analytics with params:", params);
         const response = await reportsApi.getAnalyticsData(params);
-        console.log("📡 Analytics API Response:", response);
 
         // Handle nested data structure
         if (response.data && response.data.data) {
@@ -212,7 +230,9 @@ export default function ReportsPage() {
     enabled: true,
   });
 
-  // Create report mutation for PDF generation
+  // ============ FIXED PDF GENERATION FUNCTIONS ============
+
+  // Create report mutation for PDF generation - FIXED VERSION
   const createReportMutation = useMutation({
     mutationFn: (reportData) => reportsApi.createReport(reportData),
     onMutate: () => {
@@ -223,7 +243,7 @@ export default function ReportsPage() {
       });
     },
     onSuccess: (response) => {
-      const report = response.data;
+      const report = response.data.data;
       setReportId(report.id);
       toast.success("PDF generation started!", {
         id: "report-generation",
@@ -245,41 +265,397 @@ export default function ReportsPage() {
     },
   });
 
-  // Poll for report status
+  // FIXED: Poll for report status with AUTO-DOWNLOAD
   const pollReportStatus = useCallback(
     async (id) => {
+      console.log("🔍 [DEBUG] Polling report ID:", id);
       try {
         const response = await reportsApi.getReportStatus(id);
         const report = response.data?.data || response.data;
 
-        if (report?.status === "generated" && report.result_available) {
+        console.log("📊 [DEBUG] Report status:", report?.status);
+
+        if (report?.status === "generated") {
+          console.log("✅ [DEBUG] PDF Ready! Starting auto-download...");
           setGenerating(false);
-          toast.success("PDF Report Ready!", {
-            id: "report-generation",
-            duration: 5000,
-            action: {
-              label: "Download",
-              onClick: () => handleDownloadReportById(id),
-            },
-          });
+          
+          // AUTO-DOWNLOAD HERE - Call download function immediately
+          await handleDownloadReportById(id);
+          
           setReportId(null);
           refetchReports();
         } else if (report?.status === "failed") {
+          console.log("❌ [DEBUG] PDF Failed:", report?.error_message);
           setGenerating(false);
-          toast.error("PDF generation failed. Please try again.", {
+          toast.error(`PDF generation failed: ${report?.error_message || "Unknown error"}`, {
             id: "report-generation",
           });
           setReportId(null);
-        } else if (report?.status === "processing") {
+        } else if (
+          report?.status === "processing" ||
+          report?.status === "pending"
+        ) {
+          console.log("⏳ [DEBUG] Still processing...");
+          setTimeout(() => pollReportStatus(id), 3000);
+        } else {
+          console.log("❓ [DEBUG] Unknown status, continuing to poll...");
           setTimeout(() => pollReportStatus(id), 3000);
         }
       } catch (error) {
-        console.error("Error polling report status:", error);
+        console.error("❌ [DEBUG] Error polling report status:", error);
         setTimeout(() => pollReportStatus(id), 5000);
       }
     },
     [refetchReports]
   );
+
+  // 1. FIXED: Generate PDF Report - Dashboard Summary (SIMPLE PARAMETERS)
+  const generatePDFReport = () => {
+    // SIMPLIFIED - only required parameters
+    const reportData = {
+      type: "performance_dashboard",
+      format: "pdf",
+      parameters: {
+        start_date: startDate,
+        end_date: endDate,
+        report_type: "performance_dashboard",
+      },
+    };
+
+    console.log("📄 Generating PDF with data:", reportData);
+    createReportMutation.mutate(reportData);
+  };
+
+  // 2. FIXED: Generate Team Performance PDF Report (SIMPLE PARAMETERS)
+  const generateTeamPerformancePDF = () => {
+    if (teamPerformanceData.length === 0) {
+      toast.error("No team data available");
+      return;
+    }
+
+    // SIMPLIFIED - only required parameters
+    const reportData = {
+      type: "team_performance",
+      format: "pdf",
+      parameters: {
+        start_date: startDate,
+        end_date: endDate,
+        report_type: "team_performance",
+      },
+    };
+
+    createReportMutation.mutate(reportData);
+    toast.success("Team performance PDF generation started...");
+  };
+
+  // 3. FIXED: Generate Member Report
+  const generateMemberReport = (member) => {
+    const reportData = {
+      type: "team_member_performance",
+      format: "pdf",
+      parameters: {
+        start_date: startDate,
+        end_date: endDate,
+        report_type: "team_member_performance",
+        user_id: member.id,
+      },
+    };
+
+    createReportMutation.mutate(reportData);
+    setShowMemberModal(false);
+    toast.success(`Generating report for ${member.name}...`);
+  };
+
+  // 4. FIXED: Download report by ID - CORRECTED VERSION WITH AUTO-DOWNLOAD
+  const handleDownloadReportById = async (reportId) => {
+    // Prevent multiple downloads of the same report
+    if (downloadingReports.has(reportId)) {
+      console.log("📥 Already downloading this report, skipping...");
+      return;
+    }
+    
+    try {
+      setDownloadingReports(prev => new Set(prev).add(reportId));
+      
+      // Show loading toast
+      toast.loading("Downloading report...", { 
+        id: `download-${reportId}`,
+        duration: 10000 
+      });
+
+      // 1. First, ensure the report is really ready by checking its status
+      const statusResponse = await reportsApi.getReportStatus(reportId);
+      const report = statusResponse.data?.data || statusResponse.data;
+
+      if (report?.status !== "generated") {
+        toast.error("Report is not ready for download yet.", {
+          id: `download-${reportId}`,
+        });
+        setDownloadingReports(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(reportId);
+          return newSet;
+        });
+        return;
+      }
+
+      // 2. Request the file BLOB from the correct endpoint
+      const response = await reportsApi.downloadReport(reportId);
+      
+      // 3. Extract filename (multiple fallback methods)
+      let filename = `CFITP_Report_${format(new Date(), "yyyy-MM-dd_HH-mm")}.pdf`;
+      const contentDisposition = response.headers["content-disposition"];
+      
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/);
+        if (filenameMatch && filenameMatch[1]) {
+          filename = filenameMatch[1];
+        }
+      } else if (report?.result_path) {
+        // Extract filename from result_path if available
+        const pathParts = report.result_path.split('/');
+        if (pathParts.length > 0) {
+          filename = pathParts[pathParts.length - 1];
+        }
+      }
+
+      // 4. Create and trigger the download
+      const blob = new Blob([response.data], {
+        type: response.headers["content-type"] || "application/pdf"
+      });
+
+      // Use saveAs for reliable download (same as CSV)
+      saveAs(blob, filename);
+
+      // Success message
+      toast.success(`Report downloaded: ${filename}`, {
+        id: `download-${reportId}`,
+        duration: 4000,
+      });
+      
+      console.log(`✅ [DOWNLOAD] Report ${reportId} downloaded as ${filename}`);
+
+    } catch (error) {
+      console.error("❌ Download error:", error);
+      
+      // Provide helpful error messages
+      let errorMsg = "Failed to download report.";
+      if (error.response?.status === 404) {
+        errorMsg = "Report file not found on server.";
+      } else if (error.response?.data?.detail) {
+        errorMsg = error.response.data.detail;
+      } else if (error.message) {
+        errorMsg = error.message;
+      }
+      
+      toast.error(errorMsg, {
+        id: `download-${reportId}`,
+        duration: 5000
+      });
+    } finally {
+      // Clean up downloading state
+      setDownloadingReports(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(reportId);
+        return newSet;
+      });
+    }
+  };
+
+  // 5. Download from generated reports list
+  const downloadReportFromList = async (report) => {
+    if (report.status !== 'generated' || !report.result_path) {
+      toast.error("Report not ready for download");
+      return;
+    }
+    await handleDownloadReportById(report.id);
+  };
+
+  // ============ WORKING CSV FUNCTIONS (KEEP AS IS) ============
+
+  // 6. WORKING: CSV export for dashboard data
+  const handleCSVExport = async () => {
+    try {
+      toast.loading("Preparing CSV export...", { id: "csv-export" });
+
+      const response = await reportsApi.exportCSV({
+        start_date: startDate,
+        end_date: endDate,
+        ...(filters.priority.length > 0 && {
+          priority: filters.priority.join(","),
+        }),
+        ...(filters.status.length > 0 && {
+          status: filters.status.join(","),
+        }),
+        ...(filters.slaOnly && { sla_only: "true" }),
+      });
+
+      const blob = new Blob([response.data], { type: "text/csv" });
+      const filename = `CFITP_Dashboard_${format(
+        new Date(),
+        "yyyy-MM-dd_HH-mm"
+      )}.csv`;
+      saveAs(blob, filename);
+      toast.success("CSV exported successfully!", { id: "csv-export" });
+    } catch (error) {
+      console.error("CSV export error:", error);
+      toast.error(
+        error.response?.data?.detail ||
+          error.response?.data?.error ||
+          "Failed to export CSV. Please try again.",
+        {
+          id: "csv-export",
+        }
+      );
+    }
+  };
+
+  // 7. WORKING: Export Team Performance to CSV
+  const handleExportTeamCSV = () => {
+    if (teamPerformanceData.length === 0) {
+      toast.error("No team data to export");
+      return;
+    }
+
+    try {
+      import("xlsx")
+        .then((XLSX) => {
+          const exportData = teamPerformanceData.map((member) => ({
+            "Staff Name": member.name || member.email,
+            Email: member.email,
+            Role: member.role_display || member.role,
+            "Total Assigned": member.total_assigned || 0,
+            "Resolved Issues": member.resolved || 0,
+            "Pending Issues": member.pending || 0,
+            "Efficiency (%)": member.efficiency || 0,
+            "Average Resolution Time (hours)":
+              member.avg_resolution_time_hours || "N/A",
+            "Performance Rating":
+              member.efficiency >= 80
+                ? "Excellent"
+                : member.efficiency >= 60
+                ? "Good"
+                : member.efficiency >= 40
+                ? "Average"
+                : "Needs Improvement",
+          }));
+
+          const worksheet = XLSX.utils.json_to_sheet(exportData);
+          const columnWidths = [
+            { wch: 20 },
+            { wch: 25 },
+            { wch: 15 },
+            { wch: 12 },
+            { wch: 12 },
+            { wch: 12 },
+            { wch: 12 },
+            { wch: 20 },
+            { wch: 18 },
+          ];
+          worksheet["!cols"] = columnWidths;
+
+          const workbook = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(workbook, worksheet, "Team Performance");
+
+          const fileName = `team_performance_${format(
+            new Date(),
+            "yyyy-MM-dd"
+          )}.xlsx`;
+          XLSX.writeFile(workbook, fileName);
+
+          toast.success(`Exported ${exportData.length} team members`);
+        })
+        .catch((error) => {
+          console.error("Failed to load XLSX:", error);
+          toast.error("Failed to export team data");
+        });
+    } catch (error) {
+      console.error("Team CSV export error:", error);
+      toast.error("Failed to export team data");
+    }
+  };
+
+  // 8. Export Charts Data to CSV
+  const handleExportChartsCSV = () => {
+    if (!analyticsData) {
+      toast.error("No chart data to export");
+      return;
+    }
+
+    try {
+      import("xlsx")
+        .then((XLSX) => {
+          const exportData = [];
+
+          if (
+            analyticsData.issues_by_status &&
+            analyticsData.issues_by_status.length > 0
+          ) {
+            exportData.push(["ISSUES BY STATUS", "", ""]);
+            exportData.push(["Status", "Count", "Percentage"]);
+            analyticsData.issues_by_status.forEach((item) => {
+              exportData.push([
+                item.status_display || item.status,
+                item.count || 0,
+                `${item.percentage || 0}%`,
+              ]);
+            });
+            exportData.push([]);
+          }
+
+          if (
+            analyticsData.issues_by_priority &&
+            analyticsData.issues_by_priority.length > 0
+          ) {
+            exportData.push(["ISSUES BY PRIORITY", "", ""]);
+            exportData.push(["Priority", "Count", "Percentage"]);
+            analyticsData.issues_by_priority.forEach((item) => {
+              exportData.push([
+                item.priority_display || item.priority,
+                item.count || 0,
+                `${item.percentage || 0}%`,
+              ]);
+            });
+            exportData.push([]);
+          }
+
+          if (analyticsData.summary) {
+            exportData.push(["SUMMARY METRICS", "", ""]);
+            exportData.push(["Metric", "Value", ""]);
+            Object.entries(analyticsData.summary).forEach(([key, value]) => {
+              if (typeof value === "string" || typeof value === "number") {
+                exportData.push([
+                  key.replace(/_/g, " ").toUpperCase(),
+                  value,
+                  "",
+                ]);
+              }
+            });
+          }
+
+          const worksheet = XLSX.utils.aoa_to_sheet(exportData);
+          worksheet["!cols"] = [{ wch: 25 }, { wch: 15 }, { wch: 15 }];
+
+          const workbook = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(workbook, worksheet, "Charts Data");
+
+          const fileName = `charts_data_${format(
+            new Date(),
+            "yyyy-MM-dd"
+          )}.xlsx`;
+          XLSX.writeFile(workbook, fileName);
+
+          toast.success("Charts data exported successfully!");
+        })
+        .catch((error) => {
+          console.error("Failed to load XLSX:", error);
+          toast.error("Failed to export charts data");
+        });
+    } catch (error) {
+      console.error("Charts CSV export error:", error);
+      toast.error("Failed to export charts data");
+    }
+  };
 
   // Handle date preset selection
   const handleDatePreset = (presetValue) => {
@@ -336,313 +712,16 @@ export default function ReportsPage() {
     });
   };
 
-  // Generate PDF report
-  const generatePDFReport = () => {
-    const reportData = {
-      type: "performance_dashboard",
-      format: "pdf",
-      parameters: {
-        start_date: startDate,
-        end_date: endDate,
-        date_range: dateRange,
-        ...filters,
-      },
-    };
-
-    createReportMutation.mutate(reportData);
-  };
-
-  // CSV export for dashboard data
-  const handleCSVExport = async () => {
-    try {
-      toast.loading("Preparing CSV export...", { id: "csv-export" });
-
-      const params = {
-        start_date: startDate,
-        end_date: endDate,
-        export_format: "csv",
-        ...filters,
-      };
-
-      const response = await reportsApi.exportQuick("csv", params);
-
-      if (response.data) {
-        const blob = new Blob([response.data], { type: "text/csv" });
-        const filename = `CFITP_Dashboard_${format(
-          new Date(),
-          "yyyy-MM-dd_HH-mm"
-        )}.csv`;
-        saveAs(blob, filename);
-        toast.success("CSV exported successfully!", { id: "csv-export" });
-      }
-    } catch (error) {
-      console.error("CSV export error:", error);
-      toast.error("Failed to export CSV. Please try again.", {
-        id: "csv-export",
-      });
-    }
-  };
-
-  // Export Team Performance to CSV - Using SheetJS like Feedback Page
-  const handleExportTeamCSV = () => {
-    if (teamPerformanceData.length === 0) {
-      toast.error("No team data to export");
-      return;
-    }
-
-    try {
-      // Import XLSX dynamically to avoid bundle bloat
-      import("xlsx")
-        .then((XLSX) => {
-          // Prepare data for export
-          const exportData = teamPerformanceData.map((member) => ({
-            "Staff Name": member.name || member.email,
-            Email: member.email,
-            Role: member.role_display || member.role,
-            "Total Assigned": member.total_assigned || 0,
-            "Resolved Issues": member.resolved || 0,
-            "Pending Issues": member.pending || 0,
-            "Efficiency (%)": member.efficiency || 0,
-            "Average Resolution Time (hours)":
-              member.avg_resolution_time_hours || "N/A",
-            "Performance Rating":
-              member.efficiency >= 80
-                ? "Excellent"
-                : member.efficiency >= 60
-                ? "Good"
-                : member.efficiency >= 40
-                ? "Average"
-                : "Needs Improvement",
-          }));
-
-          // Create worksheet
-          const worksheet = XLSX.utils.json_to_sheet(exportData);
-
-          // Auto-size columns
-          const columnWidths = [
-            { wch: 20 }, // Name
-            { wch: 25 }, // Email
-            { wch: 15 }, // Role
-            { wch: 12 }, // Assigned
-            { wch: 12 }, // Resolved
-            { wch: 12 }, // Pending
-            { wch: 12 }, // Efficiency
-            { wch: 20 }, // Resolution Time
-            { wch: 18 }, // Performance
-          ];
-          worksheet["!cols"] = columnWidths;
-
-          // Create workbook
-          const workbook = XLSX.utils.book_new();
-          XLSX.utils.book_append_sheet(workbook, worksheet, "Team Performance");
-
-          // Generate Excel file
-          const fileName = `team_performance_${format(
-            new Date(),
-            "yyyy-MM-dd"
-          )}.xlsx`;
-          XLSX.writeFile(workbook, fileName);
-
-          toast.success(`Exported ${exportData.length} team members`);
-        })
-        .catch((error) => {
-          console.error("Failed to load XLSX:", error);
-          toast.error("Failed to export CSV");
-        });
-    } catch (error) {
-      console.error("Team CSV export error:", error);
-      toast.error("Failed to export team data");
-    }
-  };
-
-  // Generate Team Performance PDF Report
-  const generateTeamPerformancePDF = () => {
-    if (teamPerformanceData.length === 0) {
-      toast.error("No team data available");
-      return;
-    }
-
-    const reportData = {
-      type: "team_performance_report",
-      format: "pdf",
-      parameters: {
-        start_date: startDate,
-        end_date: endDate,
-        report_type: "team_performance",
-        filters: filters,
-        team_data: teamPerformanceData,
-        period_display: periodDisplay,
-        summary_stats: {
-          total_members: teamPerformanceData.length,
-          total_assigned: teamPerformanceData.reduce(
-            (sum, m) => sum + (m.total_assigned || 0),
-            0
-          ),
-          total_resolved: teamPerformanceData.reduce(
-            (sum, m) => sum + (m.resolved || 0),
-            0
-          ),
-          total_pending: teamPerformanceData.reduce(
-            (sum, m) => sum + (m.pending || 0),
-            0
-          ),
-          avg_efficiency: Math.round(
-            teamPerformanceData.reduce(
-              (sum, m) => sum + (m.efficiency || 0),
-              0
-            ) / teamPerformanceData.length
-          ),
-        },
-      },
-    };
-
-    // Use your existing mutation for PDF generation
-    createReportMutation.mutate(reportData);
-    toast.success("Team performance PDF generation started...");
-  };
-
-  // Export Charts Data to CSV
-  const handleExportChartsCSV = () => {
-    if (!analyticsData) {
-      toast.error("No chart data to export");
-      return;
-    }
-
-    try {
-      import("xlsx")
-        .then((XLSX) => {
-          // Prepare data for export
-          const exportData = [];
-
-          // Issues by Status
-          if (
-            analyticsData.issues_by_status &&
-            analyticsData.issues_by_status.length > 0
-          ) {
-            exportData.push(["ISSUES BY STATUS", "", ""]);
-            exportData.push(["Status", "Count", "Percentage"]);
-            analyticsData.issues_by_status.forEach((item) => {
-              exportData.push([
-                item.status_display || item.status,
-                item.count || 0,
-                `${item.percentage || 0}%`,
-              ]);
-            });
-            exportData.push([]);
-          }
-
-          // Issues by Priority
-          if (
-            analyticsData.issues_by_priority &&
-            analyticsData.issues_by_priority.length > 0
-          ) {
-            exportData.push(["ISSUES BY PRIORITY", "", ""]);
-            exportData.push(["Priority", "Count", "Percentage"]);
-            analyticsData.issues_by_priority.forEach((item) => {
-              exportData.push([
-                item.priority_display || item.priority,
-                item.count || 0,
-                `${item.percentage || 0}%`,
-              ]);
-            });
-            exportData.push([]);
-          }
-
-          // Summary Metrics
-          if (analyticsData.summary) {
-            exportData.push(["SUMMARY METRICS", "", ""]);
-            exportData.push(["Metric", "Value", ""]);
-            Object.entries(analyticsData.summary).forEach(([key, value]) => {
-              if (typeof value === "string" || typeof value === "number") {
-                exportData.push([
-                  key.replace(/_/g, " ").toUpperCase(),
-                  value,
-                  "",
-                ]);
-              }
-            });
-          }
-
-          // Create worksheet
-          const worksheet = XLSX.utils.aoa_to_sheet(exportData);
-
-          // Auto-size columns
-          worksheet["!cols"] = [{ wch: 25 }, { wch: 15 }, { wch: 15 }];
-
-          // Create workbook
-          const workbook = XLSX.utils.book_new();
-          XLSX.utils.book_append_sheet(workbook, worksheet, "Charts Data");
-
-          // Generate Excel file
-          const fileName = `charts_data_${format(
-            new Date(),
-            "yyyy-MM-dd"
-          )}.xlsx`;
-          XLSX.writeFile(workbook, fileName);
-
-          toast.success("Charts data exported successfully!");
-        })
-        .catch((error) => {
-          console.error("Failed to load XLSX:", error);
-          toast.error("Failed to export charts data");
-        });
-    } catch (error) {
-      console.error("Charts CSV export error:", error);
-      toast.error("Failed to export charts data");
-    }
-  };
-
-  // Download report by ID
-  const handleDownloadReportById = async (reportId) => {
-    try {
-      toast.loading("Downloading report...", { id: "download-report" });
-
-      const response = await reportsApi.downloadReport(reportId);
-
-      const contentDisposition = response.headers["content-disposition"];
-      let filename = `CFITP_Report_${format(
-        new Date(),
-        "yyyy-MM-dd_HH-mm"
-      )}.pdf`;
-
-      if (contentDisposition) {
-        const filenameMatch = contentDisposition.match(/filename="?(.+)"?/);
-        if (filenameMatch && filenameMatch[1]) {
-          filename = filenameMatch[1];
-        }
-      }
-
-      const blob = new Blob([response.data], {
-        type: response.headers["content-type"] || "application/pdf",
-      });
-
-      saveAs(blob, filename);
-      toast.success("Report downloaded successfully!", {
-        id: "download-report",
-      });
-    } catch (error) {
-      console.error("Download error:", error);
-      toast.error("Failed to download report. Please try again.", {
-        id: "download-report",
-      });
-    }
-  };
-
-  // Prepare chart data using REAL DATABASE VALUES ONLY - NO HARDCODING
+  // Prepare chart data using REAL DATABASE VALUES ONLY
   const prepareChartData = () => {
     if (!analyticsData || analyticsLoading) {
-      console.log("⏳ No analytics data yet or still loading");
       return null;
     }
 
-    console.log("🔍 Preparing chart data from analytics:", analyticsData);
-
-    // Extract REAL data from database
     const issuesByStatus = analyticsData.issues_by_status || [];
     const issuesByPriority = analyticsData.issues_by_priority || [];
     const teamPerformance = analyticsData.team_performance || [];
 
-    // 1. Issues by Status - Pie Chart (REAL DATA ONLY)
     const statusData = {
       series: [],
       labels: [],
@@ -650,7 +729,6 @@ export default function ReportsPage() {
     };
 
     if (issuesByStatus.length > 0) {
-      // Use REAL database values
       issuesByStatus.forEach((item) => {
         statusData.series.push(item.count || 0);
         statusData.labels.push(
@@ -661,12 +739,10 @@ export default function ReportsPage() {
         );
       });
     } else {
-      // If no status data, show empty arrays
       statusData.series = [];
       statusData.labels = [];
     }
 
-    // 2. Issues by Priority - Bar Chart (REAL DATA ONLY)
     const priorityData = {
       series: [],
       labels: [],
@@ -674,7 +750,6 @@ export default function ReportsPage() {
     };
 
     if (issuesByPriority.length > 0) {
-      // Use REAL database values
       issuesByPriority.forEach((item) => {
         priorityData.series.push(item.count || 0);
         priorityData.labels.push(
@@ -683,12 +758,10 @@ export default function ReportsPage() {
         );
       });
     } else {
-      // If no priority data, show empty arrays
       priorityData.series = [];
       priorityData.labels = [];
     }
 
-    // 3. Team Performance - Grouped Bar Chart (REAL DATA ONLY)
     const teamData = {
       series: [
         { name: "Resolved", data: [] },
@@ -699,7 +772,6 @@ export default function ReportsPage() {
     };
 
     if (teamPerformance.length > 0) {
-      // Filter to show only STAFF members (not managers)
       const staffMembers = teamPerformance.filter(
         (member) => member.role_value === "staff"
       );
@@ -712,13 +784,11 @@ export default function ReportsPage() {
         teamData.series[1].data.push(member.pending || 0);
       });
     } else {
-      // If no team data, show empty arrays
       teamData.categories = [];
       teamData.series[0].data = [];
       teamData.series[1].data = [];
     }
 
-    // 4. Resolution Trends - Area Chart (DEFAULT DATA FOR VISUALIZATION)
     const trendData = {
       series: [
         {
@@ -753,7 +823,7 @@ export default function ReportsPage() {
       colors: ["#0EA5A4", "#10B981"],
     };
 
-    const chartData = {
+    return {
       issuesByStatus: {
         type: "pie",
         data: statusData,
@@ -771,34 +841,25 @@ export default function ReportsPage() {
         data: trendData,
       },
     };
-
-    console.log("✅ Prepared REAL chart data:", chartData);
-    return chartData;
   };
 
-  // Helper function to generate trend data based on actual metrics
+  // Helper function to generate trend data
   const generateTrendData = (baseValue, isCreated) => {
     const data = [];
     const months = 12;
-    const fluctuation = 0.3; // 30% fluctuation
+    const fluctuation = 0.3;
 
     for (let i = 0; i < months; i++) {
-      // Base value with some fluctuation
       let value = baseValue / months;
-
-      // Add seasonal variation
       const seasonalFactor = 1 + Math.sin((i / months) * Math.PI * 2) * 0.2;
-
-      // Random fluctuation
       const randomFactor = 1 + (Math.random() * fluctuation - fluctuation / 2);
 
-      // Adjust for created vs resolved
       if (!isCreated) {
-        value = value * 0.85; // Resolved is typically slightly lower than created
+        value = value * 0.85;
       }
 
       value = Math.round(value * seasonalFactor * randomFactor);
-      data.push(Math.max(1, value)); // Ensure at least 1
+      data.push(Math.max(1, value));
     }
 
     return data;
@@ -818,7 +879,7 @@ export default function ReportsPage() {
     return { formatted: rawValue, raw: rawValue };
   };
 
-  // KPI metrics (REAL DATABASE VALUES ONLY)
+  // KPI metrics
   const kpiMetrics = [
     {
       id: "total_issues",
@@ -878,34 +939,15 @@ export default function ReportsPage() {
     },
   ];
 
-  // Team performance table data - REAL DATA ONLY, filter to show only STAFF members
+  // Team performance table data
   const teamPerformanceData = (analyticsData?.team_performance || []).filter(
     (member) => member.role_value === "staff"
   );
 
-  // View team member details with enhanced modal
+  // View team member details
   const viewTeamMemberDetails = (member) => {
     setSelectedMember(member);
     setShowMemberModal(true);
-  };
-
-  // Generate member report
-  const generateMemberReport = (member) => {
-    const reportData = {
-      type: "team_member_performance",
-      format: "pdf",
-      parameters: {
-        start_date: startDate,
-        end_date: endDate,
-        user_id: member.id,
-        member_name: member.name,
-        ...filters,
-      },
-    };
-
-    createReportMutation.mutate(reportData);
-    setShowMemberModal(false);
-    toast.success(`Generating report for ${member.name}...`);
   };
 
   // Auto-refresh effect
@@ -946,7 +988,7 @@ export default function ReportsPage() {
       "MMM dd, yyyy"
     )}`;
 
-  // Show loading state if chart data is not ready
+  // Show loading state
   if (analyticsLoading || !chartData) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-teal-50/30 p-6">
@@ -1015,12 +1057,9 @@ export default function ReportsPage() {
               </motion.p>
             </div>
 
-            {/* Action Buttons */}
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="flex flex-wrap gap-3"
-            >
+            {/* Top Right Action Buttons */}
+            <div className="flex items-center gap-3" ref={exportMenuRef}>
+              {/* Filters Button */}
               <button
                 onClick={() => setShowFilters(!showFilters)}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-all ${
@@ -1032,33 +1071,149 @@ export default function ReportsPage() {
                 }`}
               >
                 <Filter className="w-4 h-4" />
-                <span>Filters</span>
+                <span className="hidden sm:inline">Filters</span>
               </button>
 
-              <div className="flex gap-3">
+              {/* Export Actions Group */}
+              <div className="flex items-center gap-2">
+                {/* Quick CSV Button */}
                 <button
                   onClick={handleCSVExport}
                   disabled={!analyticsData || analyticsLoading}
-                  className="flex items-center gap-2 px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center gap-2 px-4 py-2.5 bg-green-500 hover:bg-green-600 text-white rounded-lg font-medium transition-all shadow hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Download size={18} />
-                  Export CSV
+                  <span className="hidden sm:inline">Export CSV</span>
                 </button>
 
+                {/* PDF Generation Button */}
                 <button
                   onClick={generatePDFReport}
                   disabled={generating || !analyticsData}
-                  className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white rounded-lg font-medium transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-teal-500 to-blue-500 hover:from-teal-600 hover:to-blue-600 text-white rounded-lg font-medium transition-all shadow hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {generating ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
                     <FileText className="w-4 h-4" />
                   )}
-                  Generate PDF
+                  <span className="hidden sm:inline">Generate PDF</span>
                 </button>
+
+                {/* More Options Dropdown */}
+                <div className="relative">
+                  <button
+                    onClick={() => setShowExportMenu(!showExportMenu)}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-medium transition-all"
+                    title="More export options"
+                  >
+                    <ChevronDown className="w-4 h-4" />
+                  </button>
+
+                  {/* Export Dropdown Menu */}
+                  <AnimatePresence>
+                    {showExportMenu && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        className="absolute right-0 top-full mt-2 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 z-50"
+                      >
+                        <div className="py-2">
+                          <div className="px-4 py-2 border-b border-gray-100 dark:border-gray-700">
+                            <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                              Export Options
+                            </span>
+                          </div>
+
+                          {/* Team Performance CSV */}
+                          <button
+                            onClick={() => {
+                              handleExportTeamCSV();
+                              setShowExportMenu(false);
+                            }}
+                            disabled={teamPerformanceData.length === 0}
+                            className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <Users className="w-4 h-4 text-blue-500" />
+                            <div>
+                              <div className="font-medium text-sm">
+                                Team CSV
+                              </div>
+                              <div className="text-xs text-gray-500 dark:text-gray-400">
+                                Export team data
+                              </div>
+                            </div>
+                          </button>
+
+                          {/* Charts Data Export */}
+                          <button
+                            onClick={() => {
+                              handleExportChartsCSV();
+                              setShowExportMenu(false);
+                            }}
+                            disabled={!analyticsData}
+                            className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <BarChart className="w-4 h-4 text-purple-500" />
+                            <div>
+                              <div className="font-medium text-sm">
+                                Charts Data
+                              </div>
+                              <div className="text-xs text-gray-500 dark:text-gray-400">
+                                Export chart data
+                              </div>
+                            </div>
+                          </button>
+
+                          {/* Generate Team PDF */}
+                          <button
+                            onClick={() => {
+                              generateTeamPerformancePDF();
+                              setShowExportMenu(false);
+                            }}
+                            disabled={teamPerformanceData.length === 0}
+                            className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <FileText className="w-4 h-4 text-red-500" />
+                            <div>
+                              <div className="font-medium text-sm">
+                                Team PDF
+                              </div>
+                              <div className="text-xs text-gray-500 dark:text-gray-400">
+                                Generate team report
+                              </div>
+                            </div>
+                          </button>
+                          
+                          {/* Generated Reports List Button */}
+                          {generatedReports.length > 0 && (
+                            <button
+                              onClick={() => {
+                                // Scroll to reports list or show modal
+                                document.getElementById('generated-reports')?.scrollIntoView({ behavior: 'smooth' });
+                                setShowExportMenu(false);
+                              }}
+                              className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                            >
+                              <FileText className="w-4 h-4 text-teal-500" />
+                              <div>
+                                <div className="font-medium text-sm">
+                                  View Generated Reports
+                                </div>
+                                <div className="text-xs text-gray-500 dark:text-gray-400">
+                                  {generatedReports.length} report(s) available
+                                </div>
+                              </div>
+                            </button>
+                          )}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
               </div>
-            </motion.div>
+            </div>
           </div>
         </div>
       </motion.div>
@@ -1095,6 +1250,8 @@ export default function ReportsPage() {
             </div>
           </motion.div>
         )}
+
+        
 
         {/* Filters Panel */}
         <AnimatePresence>
@@ -1411,19 +1568,11 @@ export default function ReportsPage() {
                     Interactive charts using REAL database values only
                   </p>
                 </div>
-                <button
-                  onClick={handleExportChartsCSV}
-                  disabled={!analyticsData}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <Download size={18} />
-                  Export Charts Data
-                </button>
               </div>
 
               {/* Charts Grid */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Issues by Status - PIE CHART (REAL DATABASE DATA ONLY) */}
+                {/* Issues by Status */}
                 <div
                   className={`rounded-2xl border ${
                     darkMode
@@ -1540,7 +1689,7 @@ export default function ReportsPage() {
                   </div>
                 </div>
 
-                {/* Issues by Priority - BAR CHART (REAL DATABASE DATA ONLY) */}
+                {/* Issues by Priority */}
                 <div
                   className={`rounded-2xl border ${
                     darkMode
@@ -1602,7 +1751,7 @@ export default function ReportsPage() {
                   </div>
                 </div>
 
-                {/* Team Performance - GROUPED BAR CHART (REAL DATABASE DATA ONLY - STAFF ONLY) */}
+                {/* Team Performance */}
                 <div
                   className={`rounded-2xl border ${
                     darkMode
@@ -1664,7 +1813,7 @@ export default function ReportsPage() {
                   </div>
                 </div>
 
-                {/* Resolution Trends - AREA CHART (Now with visualization) */}
+                                {/* Resolution Trends */}
                 <div
                   className={`rounded-2xl border ${
                     darkMode
@@ -1768,27 +1917,6 @@ export default function ReportsPage() {
                         Individual performance metrics with detailed insights
                       </p>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={handleExportTeamCSV}
-                        className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors"
-                      >
-                        <Download size={18} />
-                        Export CSV
-                      </button>
-                      <button
-                        onClick={generateTeamPerformancePDF}
-                        disabled={generating}
-                        className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {generating ? (
-                          <Loader2 size={18} className="animate-spin" />
-                        ) : (
-                          <FileText size={18} />
-                        )}
-                        Generate PDF
-                      </button>
-                    </div>
                   </div>
 
                   <div className="overflow-x-auto">
@@ -1799,28 +1927,28 @@ export default function ReportsPage() {
                             darkMode ? "border-gray-700" : "border-gray-200"
                           }`}
                         >
-                          <th className="text-left py-3 px-4 text-sm font-medium text-gre-700 dark:text-gre-300">
+                          <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-300">
                             Team Member
                           </th>
-                          <th className="text-left py-3 px-4 text-sm font-medium text-gre-700 dark:text-gre-300">
+                          <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-300">
                             Role
                           </th>
-                          <th className="text-left py-3 px-4 text-sm font-medium text-gre-700 dark:text-gre-300">
+                          <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-300">
                             Assigned
                           </th>
-                          <th className="text-left py-3 px-4 text-sm font-medium text-gre-700 dark:text-gre-300">
+                          <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-300">
                             Resolved
                           </th>
-                          <th className="text-left py-3 px-4 text-sm font-medium text-gre-700 dark:text-gre-300">
+                          <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-300">
                             Pending
                           </th>
-                          <th className="text-left py-3 px-4 text-sm font-medium text-gre-700 dark:text-gre-300">
+                          <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-300">
                             Efficiency
                           </th>
-                          <th className="text-left py-3 px-4 text-sm font-medium text-gre-700 dark:text-gre-300">
+                          <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-300">
                             Avg. Resolution
                           </th>
-                          <th className="text-left py-3 px-4 text-sm font-medium text-gre-700 dark:text-gre-300">
+                          <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 dark:text-gray-300">
                             Actions
                           </th>
                         </tr>
@@ -1863,7 +1991,7 @@ export default function ReportsPage() {
                                 className={`px-3 py-1 rounded-full text-xs font-medium ${
                                   member.role === "manager"
                                     ? "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300"
-                                    : " text-red-800  dark:text-red-300"
+                                    : "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300"
                                 }`}
                               >
                                 {member.role_display || member.role}
@@ -2094,12 +2222,17 @@ export default function ReportsPage() {
 
               <div className="flex justify-end gap-3">
                 <button
+                  onClick={() => generateMemberReport(selectedMember)}
+                  className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-colors"
+                >
+                  Generate Report
+                </button>
+                <button
                   onClick={() => setShowMemberModal(false)}
                   className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                 >
                   Close
                 </button>
-               
               </div>
             </motion.div>
           </motion.div>

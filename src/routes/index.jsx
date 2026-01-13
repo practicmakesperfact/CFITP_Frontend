@@ -38,6 +38,10 @@ import ProfilePage from "../pages/Profile/ProfilePage";
 
 import MyFeedback from "./../pages/Feedback/MyFeedback";
 
+import PrivacyPolicyPage from "../pages/PrivacyPolicyPage";
+import TermsOfServicePage from "../pages/TermsOfServicePage";
+import HelpCenterPage from "../pages/HelpCenterPage"; 
+
 const router = createBrowserRouter([
   // PUBLIC ROUTES (Home Layout)
   {
@@ -64,6 +68,9 @@ const router = createBrowserRouter([
         path: "request-access",
         element: <RequestAccess />,
       },
+      { path: "/privacy", element: <PrivacyPolicyPage /> },
+      { path: "/terms", element: <TermsOfServicePage /> },
+      { path: "/help", element: <HelpCenterPage /> },
     ],
   },
 
@@ -115,7 +122,6 @@ const router = createBrowserRouter([
         path: "dashboard",
         element: <DashboardRedirect />,
       },
-     
 
       // ADMIN PAGES SECTION
       {
@@ -160,6 +166,8 @@ const router = createBrowserRouter([
       { path: "feedback", element: <FeedbackPage /> },
       { path: "feedback/my", element: <MyFeedback /> },
 
+      // LEGAL PAGES
+
       // REPORTS (Manager/Admin only)
       {
         path: "reports",
@@ -175,8 +183,6 @@ const router = createBrowserRouter([
 
       // PROFILE
       { path: "profile", element: <ProfilePage /> },
-      
-
     ],
   },
 

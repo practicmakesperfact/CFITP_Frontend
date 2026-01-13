@@ -989,9 +989,12 @@ export default function IssueDetailPage() {
           <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6">
             <div className="flex flex-col sm:flex-row justify-between items-start gap-3 sm:gap-4">
               <div className="w-full">
-                <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 mb-2 break-words">
+                <h1 className="   text-gray-900 mb-2 break-words">
                   {issue.title}
                 </h1>
+                <h6 className="  text-gray-900 mb-2 break-words">
+                  {issue.description}
+                </h6>
 
                 <div className="flex flex-wrap items-center gap-2">
                   <span

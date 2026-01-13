@@ -1,39 +1,46 @@
-
-import { Link } from "react-router-dom";
-import { 
-  MessageSquare, 
-  Facebook, 
-  Twitter, 
-  Linkedin, 
-  Instagram, 
-  Mail, 
-  Phone, 
+import { Link, useNavigate } from "react-router-dom";
+import {
+  MessageSquare,
+  Facebook,
+  Twitter,
+  Linkedin,
+  Instagram,
+  Mail,
+  Phone,
   MapPin,
   Globe,
   Shield,
   HelpCircle,
   FileText,
   Users,
-  BarChart3
+  BarChart3,
 } from "lucide-react";
 
 export default function HomeFooter() {
+  const navigate = useNavigate();
+
   const quickLinks = [
     { path: "/", label: "Home" },
     { path: "/login", label: "Login" },
     { path: "/register", label: "Register" },
-    { path: "/request-access", label: "Request Access" },
   ];
 
   const productLinks = [
-    { path: "/app/issues", label: "Issue Tracking", icon: <FileText size={16} /> },
-    { path: "/app/feedback", label: "Feedback System", icon: <MessageSquare size={16} /> },
+    {
+      path: "/app/issues",
+      label: "Issue Tracking",
+      icon: <FileText size={16} />,
+    },
+    {
+      path: "/app/feedback",
+      label: "Feedback System",
+      icon: <MessageSquare size={16} />,
+    },
     { path: "/app/reports", label: "Analytics", icon: <BarChart3 size={16} /> },
   ];
 
   const supportLinks = [
     { path: "/help", label: "Help Center", icon: <HelpCircle size={16} /> },
-    { path: "/contact", label: "Contact Us", icon: <Mail size={16} /> },
     { path: "/privacy", label: "Privacy Policy", icon: <Shield size={16} /> },
     { path: "/terms", label: "Terms of Service", icon: <FileText size={16} /> },
   ];
@@ -44,6 +51,23 @@ export default function HomeFooter() {
     { icon: <Linkedin size={20} />, label: "LinkedIn", url: "#" },
     { icon: <Instagram size={20} />, label: "Instagram", url: "#" },
   ];
+
+  // Handle link clicks to prevent scrolling to top
+  const handleLinkClick = (e, path) => {
+    e.preventDefault();
+
+    // Get current scroll position
+    const scrollY = window.scrollY;
+
+    // Navigate to the new page
+    navigate(path);
+
+    // After navigation, restore scroll position
+    // This happens after a small delay to let React Router handle the navigation
+    setTimeout(() => {
+      window.scrollTo(0, scrollY);
+    }, 100);
+  };
 
   return (
     <footer className="bg-gray-900 text-gray-300 pt-16 pb-8">
@@ -57,11 +81,13 @@ export default function HomeFooter() {
               </div>
               <div>
                 <h3 className="text-xl font-bold text-white">CFITP</h3>
-                <p className="text-sm text-teal-400">Client Feedback & Issue Tracking Portal</p>
+                <p className="text-sm text-teal-400">
+                  Client Feedback & Issue Tracking Portal
+                </p>
               </div>
             </div>
             <p className="text-gray-400 mb-6">
-              Empowering businesses with powerful customer feedback and issue 
+              Empowering businesses with powerful customer feedback and issue
               tracking solutions.
             </p>
             <div className="flex gap-4">
@@ -71,6 +97,10 @@ export default function HomeFooter() {
                   href={social.url}
                   className="w-10 h-10 bg-gray-800 rounded-full flex items-center justify-center hover:bg-teal-600 hover:text-white transition-colors"
                   aria-label={social.label}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    window.open(social.url, "_blank");
+                  }}
                 >
                   {social.icon}
                 </a>
@@ -96,9 +126,11 @@ export default function HomeFooter() {
             </ul>
           </div>
 
-          {/* Product */}
+          {/* Platform */}
           <div>
-            <h4 className="text-lg font-bold text-white mb-6">Product</h4>
+            <h4 className="text-lg font-bold text-white mb-6">
+              Platform features
+            </h4>
             <ul className="space-y-3">
               {productLinks.map((link) => (
                 <li key={link.path}>
@@ -122,15 +154,16 @@ export default function HomeFooter() {
             <ul className="space-y-3 mb-8">
               {supportLinks.map((link) => (
                 <li key={link.path}>
-                  <Link
-                    to={link.path}
-                    className="flex items-center gap-3 hover:text-teal-400 transition-colors group"
+                  <a
+                    href={link.path}
+                    onClick={(e) => handleLinkClick(e, link.path)}
+                    className="flex items-center gap-3 hover:text-teal-400 transition-colors group cursor-pointer"
                   >
                     <div className="text-gray-500 group-hover:text-teal-400 transition-colors">
                       {link.icon}
                     </div>
                     {link.label}
-                  </Link>
+                  </a>
                 </li>
               ))}
             </ul>
@@ -138,15 +171,15 @@ export default function HomeFooter() {
             <div className="space-y-4">
               <div className="flex items-center gap-3">
                 <Mail className="text-teal-400" size={18} />
-                <span>support@cfitp.com</span>
+                <span>support@aitb.edu.et</span>
               </div>
               <div className="flex items-center gap-3">
                 <Phone className="text-teal-400" size={18} />
-                <span>+1 (555) 123-4567</span>
+                <span>+251 58 220 0000</span>
               </div>
               <div className="flex items-center gap-3">
                 <MapPin className="text-teal-400" size={18} />
-                <span>123 Business St, City, Country</span>
+                <span>Bahir Dar, Ethiopia</span>
               </div>
             </div>
           </div>
@@ -157,17 +190,26 @@ export default function HomeFooter() {
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
             <div className="text-center md:text-left">
               <p className="text-gray-400">
-                © {new Date().getFullYear()} CFITP Portal. All rights reserved.
+                © {new Date().getFullYear()} AITB Issue Tracking System. All
+                rights reserved.
               </p>
             </div>
-            
+
             <div className="flex items-center gap-6 text-sm">
-              <Link to="/privacy" className="hover:text-teal-400 transition-colors">
+              <a
+                href="/privacy"
+                onClick={(e) => handleLinkClick(e, "/privacy")}
+                className="hover:text-teal-400 transition-colors cursor-pointer"
+              >
                 Privacy Policy
-              </Link>
-              <Link to="/terms" className="hover:text-teal-400 transition-colors">
+              </a>
+              <a
+                href="/terms"
+                onClick={(e) => handleLinkClick(e, "/terms")}
+                className="hover:text-teal-400 transition-colors cursor-pointer"
+              >
                 Terms of Service
-              </Link>
+              </a>
               <div className="flex items-center gap-2 text-gray-500">
                 <Globe size={14} />
                 <span>English</span>

@@ -1,0 +1,21 @@
+/* In your globals.css or App.css */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Or add this to prevent default scroll behavior */
+* {
+  scroll-behavior: smooth;
+}
+
+/* To keep footer at bottom when navigating */
+body {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* If using a main content wrapper */
+.main-content {
+  flex: 1;
+}

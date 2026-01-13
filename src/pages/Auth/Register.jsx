@@ -203,17 +203,6 @@ export default function Register() {
             </div>
           </div>
 
-          <div className="pt-8 border-t border-white/20">
-            <p className="text-teal-200/80 text-sm">
-              Already registered?{" "}
-              <Link
-                to="/login"
-                className="text-white font-semibold hover:underline"
-              >
-                Sign in
-              </Link>
-            </p>
-          </div>
         </div>
       </motion.div>
 
