@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Menu, X, MessageSquare, Home, LogIn, UserPlus } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import cfitpLogo from "../../assets/cfitp-logo.png";
 
 export default function HomeNavbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -19,14 +20,16 @@ export default function HomeNavbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
-          <Link to="/" className="flex items-center gap-2">
-            <div className="w-10 h-10 bg-gradient-to-br from-teal-500 to-teal-600 rounded-xl flex items-center justify-center">
-              <MessageSquare className="text-white" size={24} />
-            </div>
+          <Link to="/" className="flex items-center gap-3">
+            <img
+              src={cfitpLogo}
+              alt="CFITP Logo"
+              className="w-20 h-20 object-contain"
+            />
             <div>
               <span className="text-xl font-bold text-gray-900">CFITP</span>
               <span className="text-xs text-teal-600 font-medium block -mt-1">
-                Client Feedback Portal
+                Client Feedback & Issue Tracking Portal
               </span>
             </div>
           </Link>
@@ -47,7 +50,7 @@ export default function HomeNavbar() {
                 {link.label}
               </Link>
             ))}
-            
+
             <Link
               to="/register"
               className="bg-gradient-to-r from-teal-500 to-teal-600 text-white px-6 py-2 rounded-lg font-medium hover:from-teal-600 hover:to-teal-700 transition-all shadow-lg hover:shadow-teal-500/30"
@@ -91,14 +94,14 @@ export default function HomeNavbar() {
                   {link.label}
                 </Link>
               ))}
-              
+
               <div className="pt-4 border-t border-gray-200">
                 <Link
                   to="/register"
                   onClick={() => setIsMenuOpen(false)}
                   className="block w-full bg-gradient-to-r from-teal-500 to-teal-600 text-white text-center py-3 rounded-lg font-medium"
                 >
-                   Get Started
+                  Get Started
                 </Link>
               </div>
             </div>

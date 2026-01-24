@@ -6,13 +6,8 @@ import {
   Users,
   Shield,
   BarChart3,
-  FileText,
   Building,
-  Lightbulb,
   Target,
-  Globe,
-  Award,
-  Cpu,
   Mail,
   Phone,
   Bug,
@@ -56,7 +51,7 @@ export default function HomePage() {
       icon: <BarChart3 className="text-[#008080]" size={24} />,
       title: "Performance Analytics Dashboard",
       description:
-        "Monitor response times, resolution rates, and customer satisfaction metrics.",
+        "Monitor response times, resolution rates.",
       color: "bg-teal-50 border-teal-200",
     },
     {
@@ -80,7 +75,7 @@ export default function HomePage() {
   const values = [
     {
       icon: <Target className="text-green-600" size={20} />,
-      title: "Efficient Resolution",
+      title: "Efficient Issue Resolution",
       description: "Streamlined workflow for quick issue resolution",
     },
     {
@@ -90,7 +85,7 @@ export default function HomePage() {
     },
     {
       icon: <Users className="text-purple-600" size={20} />,
-      title: "Transparent Communication",
+      title: "Transparent Stakeholder Communication",
       description: "Clear tracking and updates for all stakeholders",
     },
     {
@@ -121,24 +116,24 @@ export default function HomePage() {
             transition={{ duration: 0.8 }}
           >
             {/* Platform Badge */}
-            <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-sm px-6 py-3 rounded-full mb-6 border border-white/30">
+            <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-sm px-6 py-3 rounded-full mb-6 mt-16 border border-white/30">
               <Building className="text-yellow-300" size={20} />
               <span className="text-sm font-semibold">
                 Client Feedback & Issue Tracking Portal
               </span>
             </div>
 
-            <h1 className="text-4xl md:text-6xl font-bold mb-6 leading-tight">
-              Streamline Your
+            <h1 className="text-4xl md:text-6xl font-bold mb-8 leading-tight">
+              Centralized Client Feedback
               <span className="block text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 to-green-300">
-                Issue Resolution Process
+                and Issue Tracking System
               </span>
             </h1>
 
             <p className="text-xl text-gray-200 mb-10 max-w-3xl mx-auto leading-relaxed">
-              The official platform for Amhara Innovation Technology Bureau to
-              manage client feedback, track technical issues, and enhance
-              service delivery through systematic issue management.
+              An official platform for the Amhara Innovation Technology Bureau
+              to collect client feedback, track technical issues, and improve
+              service delivery through a structured issue management process.
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
@@ -156,7 +151,7 @@ export default function HomePage() {
                 className="bg-white/15 backdrop-blur-sm text-white px-8 py-4 rounded-xl font-bold text-lg hover:bg-white/25 transition-all duration-300 border-2 border-white/30 flex items-center justify-center gap-2 hover:scale-105"
               >
                 <Bug size={20} />
-                Report an Issue
+                Submit Feedback or Issue
               </Link>
             </div>
 
@@ -195,7 +190,7 @@ export default function HomePage() {
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-12">
             <h2 className="text-3xl font-bold text-[#0F4C81] mb-4">
-              Why Choose Our Issue Tracking Platform
+              Why Choose Our Feedback and Issue Tracking Platform
             </h2>
             <p className="text-gray-600 max-w-3xl mx-auto">
               A comprehensive solution designed specifically for government
@@ -275,13 +270,13 @@ export default function HomePage() {
           </div>
 
           <h2 className="text-4xl font-bold text-white mb-6">
-            Start Managing Feedback Effectively Today
+            Start Managing Client Feedback and Issues Effectively
           </h2>
 
           <p className="text-blue-100 text-lg mb-10 max-w-3xl mx-auto leading-relaxed">
-            Join government agencies, technology partners, and service providers
-            in using our platform to streamline issue resolution and improve
-            customer satisfaction.
+            The platform supports government agencies, technology partners, and
+            service providers in managing feedback, tracking issues, and
+            improving service quality through a centralized system.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-6 justify-center mb-12">
@@ -328,7 +323,6 @@ export default function HomePage() {
             </div>
           </div>
 
-
           {/* Contact Information */}
           <div className="mt-12 pt-8 border-t border-white/20">
             <p className="text-blue-100 mb-4">
@@ -336,7 +330,7 @@ export default function HomePage() {
             </p>
             <div className="flex flex-wrap justify-center gap-6 text-sm">
               <a
-                href="mailto:support@aitb-portal.gov.et"
+                href="mailto:support@gmail.com"
                 className="text-white hover:text-yellow-300 transition-colors flex items-center gap-2"
               >
                 <Mail size={16} />
