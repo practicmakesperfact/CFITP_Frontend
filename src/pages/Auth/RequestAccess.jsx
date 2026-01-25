@@ -1,4 +1,4 @@
-// src/pages/Auth/RequestAccess.jsx
+
 import { useForm } from "react-hook-form";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link, useNavigate } from "react-router-dom";
@@ -92,31 +92,23 @@ export default function RequestAccess() {
 
   const onSubmit = async (data) => {
     try {
-      // Store request
-      const existingRequests = JSON.parse(
-        localStorage.getItem("access_requests") || "[]"
-      );
-      localStorage.setItem(
-        "access_requests",
-        JSON.stringify([
-          ...existingRequests,
-          {
-            ...data,
-            id: Date.now(),
-            status: "pending",
-            submittedAt: new Date().toISOString(),
-          },
-        ])
-      );
+      await axios.post("/api/v1/access/request/", {
+        reason: data.reason,
+      });
 
-      toast.success("Access request submitted!");
+      toast.success("Access request submitted for admin approval");
       setIsSubmitted(true);
 
-      setTimeout(() => navigate("/login"), 3000);
+      setTimeout(() => navigate("/login"), 2500);
     } catch (error) {
-      toast.error("Failed to submit request.");
+      toast.error(
+        error.response?.data?.detail ||
+          error.response?.data?.error ||
+          "Failed to submit access request"
+      );
     }
   };
+
 
   const handleRoleSelect = (role) => {
     setValue("role", role);
@@ -264,10 +256,12 @@ export default function RequestAccess() {
             {/* Form Header */}
             <div className="text-center mb-8">
               <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                Request Employee Access
+                Internal System Access Request
               </h2>
               <p className="text-gray-600">
-                Fill in your details for access review
+                Submit this form to request authorized access to the ANRS
+                internal portal. All requests are reviewed and approved by
+                system administrators.
               </p>
             </div>
 
@@ -419,7 +413,7 @@ export default function RequestAccess() {
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
                     <Mail size={14} className="text-teal-600" />
-                     Email
+                    Email
                   </label>
                   <input
                     {...register("email", { required: "Email is required" })}

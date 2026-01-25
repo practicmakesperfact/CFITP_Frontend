@@ -453,7 +453,7 @@ export default function Login() {
               <div className="w-16 h-16 flex items-center justify-center bg-white/20 rounded-2xl p-2">
                 <img
                   src={anrsLogo}
-                  alt="ANRS Logo"
+                  alt="AITBLogo"
                   className="w-12 h-12 object-contain"
                 />
               </div>
@@ -772,7 +772,7 @@ export default function Login() {
                     </div>
                     <div className="text-left">
                       <p className="font-semibold text-gray-900">
-                        ANRS ITB Security
+                        AITB Security
                       </p>
                       <p className="text-gray-600 text-xs">
                         Enterprise-grade encryption & compliance
@@ -803,7 +803,7 @@ export default function Login() {
                   />
                 </Link>
                 <p className="mt-4 text-gray-600 mb-4 font-medium">
-                  New to ANRS ITB Portal?
+                  New to AITB Portal?
                 </p>
                 <Link
                   to="/request-access"
@@ -817,7 +817,7 @@ export default function Login() {
                 </Link>
 
                 <p className="text-xs text-gray-500 mt-3">
-                  Access requires verification and approval from ANRS ITB
+                  Access requires verification and approval from AITB
                   administrators
                 </p>
               </motion.div>
@@ -834,7 +834,7 @@ export default function Login() {
             <div className="flex flex-col items-center gap-3 text-sm text-gray-500">
               <div className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-gray-50 to-teal-50 rounded-full">
                 <Shield size={12} className="text-teal-500" />
-                <span>© {new Date().getFullYear()} ANRS Innovation Bureau</span>
+                <span>© {new Date().getFullYear()} AITB </span>
               </div>
               <p className="text-xs">Government Technology Platform v2.1.0</p>
             </div>

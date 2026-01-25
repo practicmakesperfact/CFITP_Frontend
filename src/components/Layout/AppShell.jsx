@@ -1,4 +1,3 @@
-
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import {
   Home,
@@ -17,12 +16,14 @@ import Footer from "./Footer";
 import toast from "react-hot-toast";
 import { useAuth } from "../../app/hooks.js";
 import NotificationBell from "../Notifications/NotificationBell";
+
 export default function AppShell() {
   const { user, isLoading, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const { sidebarOpen, toggleSidebar, userRole } = useUIStore();
   const currentPath = location.pathname;
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -58,21 +59,29 @@ export default function AppShell() {
     ],
 
     admin: [
-    { path: "/app/dashboard/admin", label: "Dashboard", icon: Home },
-    { path: "/app/issues", label: "All Issues", icon: Bug },
-    { path: "/app/admin/issue-history", label: "Issue History", icon: BarChart3 },
-    { path: "/app/admin/feedback", label: "User Feedback", icon: MessageSquare },
-    { path: "/app/admin/users", label: "User Management", icon: Users },
-    { path: "/app/reports", label: "Reports", icon: BarChart3 },
-    { path: "/app/notifications", label: "Notifications", icon: Bell },
-    { path: "/app/profile", label: "Profile", icon: User },
-  ],
+      { path: "/app/dashboard/admin", label: "Dashboard", icon: Home },
+      { path: "/app/issues", label: "All Issues", icon: Bug },
+      {
+        path: "/app/admin/issue-history",
+        label: "Issue History",
+        icon: BarChart3,
+      },
+      {
+        path: "/app/admin/feedback",
+        label: "User Feedback",
+        icon: MessageSquare,
+      },
+      { path: "/app/admin/users", label: "User Management", icon: Users },
+      { path: "/app/reports", label: "Reports", icon: BarChart3 },
+      { path: "/app/notifications", label: "Notifications", icon: Bell },
+      { path: "/app/profile", label: "Profile", icon: User },
+    ],
   };
 
   const menuItems = menuConfig[userRole] || menuConfig.client;
 
   const safeLogout = () => {
-    // ONLY remove login data 
+    // ONLY remove login data
     localStorage.removeItem("access_token");
     localStorage.removeItem("refresh_token");
     localStorage.removeItem("user_role");
@@ -84,11 +93,11 @@ export default function AppShell() {
 
   return (
     <div className="flex min-h-screen bg-[#F8FAFC] text-slate-700">
-      {/* Sidebar */}
+      {/* Sidebar - Fixed and non-scrollable */}
       <aside
         className={`${
           sidebarOpen ? "w-64" : "w-20"
-        } bg-[#0EA5A4]/10 border-r border-gray-200 transition-all duration-300 flex flex-col`}
+        } bg-[#0EA5A4]/10 border-r border-gray-200 transition-all duration-300 flex flex-col fixed h-full left-0 top-0 z-10`}
       >
         <div className="p-4 flex items-center justify-between border-b border-gray-200">
           {sidebarOpen && (
@@ -133,8 +142,14 @@ export default function AppShell() {
         </div>
       </aside>
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col">
+      {/* Main Content - This will be offset by sidebar width */}
+      <div
+        className={`flex-1 flex flex-col transition-all duration-300 ${
+          sidebarOpen ? "ml-64" : "ml-20"
+        }`}
+        style={{ width: `calc(100% - ${sidebarOpen ? "16rem" : "5rem"})` }}
+      >
+        {/* Navbar - ORIGINAL BLACK COLOR */}
         <header className="bg-[#0F172A] text-white px-6 py-4 shadow flex justify-between items-center">
           <h2 className="text-lg font-semibold">
             {menuItems.find((i) => currentPath.startsWith(i.path))?.label ||
@@ -142,7 +157,9 @@ export default function AppShell() {
           </h2>
           <NotificationBell />
         </header>
-        <main className="flex-1 p-6 bg-gray-50">
+
+        {/* Main content area - This is the scrollable part */}
+        <main className="flex-1 p-6 bg-gray-50 overflow-y-auto">
           <Outlet />
         </main>
         <Footer />
