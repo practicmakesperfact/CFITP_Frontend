@@ -309,19 +309,7 @@ export default function Login() {
               transition={{ delay: 0.3 }}
               className="flex items-center gap-4 mb-8"
             >
-              <div>
-                <h1 className="text-3xl font-bold tracking-wide">ANRS</h1>
-                <p className="text-teal-200 text-sm font-semibold tracking-wider">
-                  INNOVATION AND TECHNOLOGY BUREAU
-                </p>
-                <div className="flex items-center gap-2 mt-2">
-                  <Sparkles size={12} className="text-yellow-300" />
-                  <span className="text-xs text-teal-300">
-                    Official Government Portal
-                  </span>
-                  <Sparkles size={12} className="text-yellow-300" />
-                </div>
-              </div>
+              
             </motion.div>
 
             {/* Main Tagline */}
@@ -369,7 +357,7 @@ export default function Login() {
                   icon: <Shield size={20} />,
                   title: "Comprehensive Analytics",
                   description:
-                    "AI-powered insights and detailed reporting for decision making",
+                    "Detailed reporting for decision making",
                 },
               ].map((feature, index) => (
                 <motion.div
@@ -458,10 +446,10 @@ export default function Login() {
                 />
               </div>
               <div className="text-left">
-                <h1 className="text-2xl font-bold text-white">ANRS</h1>
+                {/* <h1 className="text-2xl font-bold text-white">ANRS</h1>
                 <p className="text-teal-100 text-xs font-medium">
                   INNOVATION & TECHNOLOGY BUREAU
-                </p>
+                </p> */}
                 <div className="flex items-center gap-1 mt-1">
                   <Sparkles size={10} className="text-yellow-300" />
                   <span className="text-teal-200 text-xs">Official Portal</span>

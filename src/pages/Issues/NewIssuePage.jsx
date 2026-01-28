@@ -93,7 +93,7 @@ export default function NewIssuePage() {
           >
             <option value="bug">Bug Report</option>
             <option value="feature">Feature Request</option>
-            <option value="feedback">General Feedback</option>
+            
           </select>
         </div>
 

@@ -147,19 +147,7 @@ export default function Register() {
         <div className="relative z-10 w-full flex flex-col justify-between p-12 text-white">
           <div>
             <div className="flex items-center gap-4 mb-10">
-              <div className="p-3 bg-white/20 backdrop-blur-sm rounded-xl border border-white/30">
-                <img
-                  src={anrsLogo}
-                  alt="ANRS Logo"
-                  className="w-12 h-12 object-contain"
-                />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold">ANRS</h1>
-                <p className="text-teal-200 text-sm font-medium">
-                  INNOVATION AND TECHNOLOGY BUREAU
-                </p>
-              </div>
+              
             </div>
 
             <h2 className="text-4xl font-bold mb-6 leading-tight">
@@ -346,7 +334,7 @@ export default function Register() {
                     {...register("first_name", {
                       required: "First name is required",
                     })}
-                    placeholder="John"
+                    placeholder="firstName"
                     className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-100 outline-none"
                     disabled={isSubmitting}
                   />
@@ -365,7 +353,7 @@ export default function Register() {
                     {...register("last_name", {
                       required: "Last name is required",
                     })}
-                    placeholder="Doe"
+                    placeholder="LastName"
                     className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-100 outline-none"
                     disabled={isSubmitting}
                   />
@@ -386,7 +374,7 @@ export default function Register() {
                 <input
                   {...register("email", { required: "Email is required" })}
                   type="email"
-                  placeholder="john.doe@example.com"
+                  placeholder="example.@example.com"
                   className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-100 outline-none"
                   disabled={isSubmitting}
                 />
