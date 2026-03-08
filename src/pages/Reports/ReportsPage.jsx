@@ -237,17 +237,12 @@ export default function ReportsPage() {
     mutationFn: (reportData) => reportsApi.createReport(reportData),
     onMutate: () => {
       setGenerating(true);
-    //   toast.loading("Generating PDF report...", {
-    //     id: "report-generation",
-    //     duration: Infinity,
-    //   });
+ 
     },
     onSuccess: (response) => {
       const report = response.data.data;
       setReportId(report.id);
-    //   toast.success("PDF generation started!", {
-    //     id: "report-generation",
-    //   });
+   
       pollReportStatus(report.id);
       setTimeout(() => refetchReports(), 2000);
     },
